@@ -31,6 +31,7 @@ function defaultProgress() {
     lessons: {},     // id da aula   -> { completedAt, quizBest, attempts }
     exercises: {},   // id exercício -> { done, attempts, at }
     exams: {},       // id módulo    -> [ { at, correct, total, pct, answers } ]
+    validatedModules: {}, // módulos demonstrados no teste de nivelamento
     skills: {},      // id competência -> status
     projects: {},    // id projeto   -> { status, github }
     notes: {},       // id aula      -> texto do desafio
@@ -125,6 +126,7 @@ function setFeedback(element, kind, text) {
 const ALL_MODULES = DATA.phases.flatMap((phase) => phase.modules);
 const findModule = (id) => ALL_MODULES.find((m) => m.id === id);
 const phaseOf = (module) => DATA.phases.find((p) => p.modules.includes(module));
+const moduleForLesson = (lessonId) => ALL_MODULES.find((module) => module.lessons.includes(lessonId));
 
 const hasContent = (module) => module.lessons.length > 0;
 const lessonDone = (id) => Boolean(progress.lessons[id]?.completedAt);
@@ -133,26 +135,36 @@ const exercisesOf = (module) => DATA.exercises.filter((e) => module.lessons.incl
 const attemptsOf = (module) => progress.exams[module.id] ?? [];
 const bestExam = (module) => Math.max(0, ...attemptsOf(module).map((a) => a.pct));
 const examPassed = (module) => bestExam(module) >= PASS_EXAM;
+const moduleValidated = (module) => Boolean(progress.validatedModules?.[module.id]);
+const lessonValidated = (id) => {
+  const module = moduleForLesson(id);
+  return Boolean(module && moduleValidated(module));
+};
 
 /** Pré-requisitos da prova: todas as aulas concluídas e todos os exercícios feitos. */
 function requirementsMet(module) {
   return module.lessons.every(lessonDone) && exercisesOf(module).every((e) => exerciseDone(e.id));
 }
 
-/** Módulo concluído = atividades obrigatórias + aprovação na prova. */
-function moduleCompleted(module) {
+/** Módulo concluído por estudo ou validado no teste de nivelamento. */
+function moduleLearned(module) {
   return hasContent(module) && requirementsMet(module) && examPassed(module);
 }
 
-/** Um módulo só abre quando o anterior (na ordem da trilha) está concluído. */
+function moduleCompleted(module) {
+  return moduleValidated(module) || moduleLearned(module);
+}
+
+/** Um módulo só abre quando todos os anteriores estão concluídos ou validados. */
 function moduleLocked(module) {
   const index = ALL_MODULES.indexOf(module);
-  return index > 0 && !moduleCompleted(ALL_MODULES[index - 1]);
+  return index > 0 && ALL_MODULES.slice(0, index).some((previous) => !moduleCompleted(previous));
 }
 
 function moduleStatus(module) {
-  if (moduleCompleted(module)) return 'concluido';
+  if (moduleLearned(module)) return 'concluido';
   if (moduleLocked(module)) return 'bloqueado';
+  if (moduleValidated(module)) return 'validado';
   if (!hasContent(module)) return 'em-breve';
   const started = module.lessons.some((id) => progress.lessons[id]) || exercisesOf(module).some((e) => progress.exercises[e.id]);
   return started ? 'andamento' : 'disponivel';
@@ -160,6 +172,7 @@ function moduleStatus(module) {
 
 const STATUS_LABELS = {
   'concluido':  ['Concluído', 'ok'],
+  'validado':   ['Validado', 'ok'],
   'andamento':  ['Em andamento', 'blue'],
   'disponivel': ['Disponível', 'blue'],
   'em-breve':   ['Conteúdo em breve', ''],
@@ -171,7 +184,7 @@ const statusPill = (status) => pill(...STATUS_LABELS[status]);
 /** Indicadores gerais do Dashboard. */
 function computeStats() {
   return {
-    lessonsCompleted: Object.keys(DATA.lessons).filter(lessonDone).length,
+    lessonsCompleted: Object.keys(DATA.lessons).filter((id) => lessonDone(id) || lessonValidated(id)).length,
     exercisesDone: DATA.exercises.filter((e) => exerciseDone(e.id)).length,
     modulesCompleted: ALL_MODULES.filter(moduleCompleted).length,
     studyMinutes: Object.values(progress.studyLog).reduce((sum, min) => sum + min, 0),
@@ -294,6 +307,15 @@ function renderDashboard() {
       : String(value);
   });
 
+  const completedPhases = DATA.phases.map((phase) => phase.modules.every(moduleCompleted));
+  const firstIncompletePhase = completedPhases.findIndex((completed) => !completed);
+  $$('[data-trail-step]').forEach((dot, index) => {
+    dot.classList.toggle('trail__dot--completed', Boolean(completedPhases[index]));
+    dot.classList.toggle('trail__dot--current', index === firstIncompletePhase);
+  });
+  const completedPhaseCount = completedPhases.filter(Boolean).length;
+  $('.trail__svg').setAttribute('aria-label', `Trilha com 8 fases, da lógica de programação ao portfólio profissional. ${completedPhaseCount} concluídas.`);
+
   // Barras de evolução
   $('#progress-list').replaceChildren(...DATA.careers.map((c) => buildTrack(computeTrack(c))));
 
@@ -349,22 +371,39 @@ function renderTrilha(moduleId) {
 
 function trilhaOverviewHtml() {
   const firstOpen = DATA.phases.find((p) => p.modules.some((m) => !moduleCompleted(m)));
+  const currentModule = ALL_MODULES.find((module) => hasContent(module) && !moduleLocked(module) && !moduleCompleted(module));
   return DATA.phases.map((phase, i) => {
     const done = phase.modules.filter(moduleCompleted).length;
-    const rows = phase.modules.map((module) => {
+    const rows = phase.modules.map((module, j) => {
       const status = moduleStatus(module);
-      const inner = `<span class="module__title">${esc(module.title)}</span>${statusPill(status)}`;
-      return status === 'bloqueado'
-        ? `<li class="module module--locked" aria-disabled="true">${inner}</li>`
-        : `<li><a class="module" href="#trilha/${module.id}">${inner}</a></li>`;
+      const current = module === currentModule;
+      const validated = moduleValidated(module) && !moduleLearned(module);
+      const completed = status === 'concluido' || status === 'validado' || validated;
+      const nodeClass = `roadmap__node${status === 'bloqueado' ? ' roadmap__node--locked' : ''}`;
+      const icon = completed
+        ? '<svg class="icon" aria-hidden="true"><use href="#icon-check"/></svg>'
+        : `<span>${i + 1}.${j + 1}</span>`;
+      const statusText = status === 'bloqueado' && validated
+        ? 'Validado · aguardando etapas anteriores'
+        : STATUS_LABELS[status][0];
+      const inner = `<span class="roadmap__node-icon">${icon}</span>
+        <span class="roadmap__node-copy"><strong>${esc(module.title)}</strong><small>${esc(statusText)}</small></span>`;
+      const node = status === 'bloqueado'
+        ? `<span class="${nodeClass}" aria-disabled="true">${inner}</span>`
+        : `<a class="${nodeClass}" href="#trilha/${module.id}">${inner}</a>`;
+      return `<li class="roadmap__item roadmap__item--${j % 2 === 0 ? 'left' : 'right'}${current ? ' roadmap__item--current' : ''}${validated || status === 'validado' ? ' roadmap__item--validated' : ''}${completed ? ' roadmap__item--done' : ''}">${node}</li>`;
     }).join('');
+    const pct = Math.round((done / phase.modules.length) * 100);
     return `
-      <details class="phase card" ${phase === firstOpen ? 'open' : ''}>
-        <summary class="phase__summary">
-          <span class="phase__title">Fase ${i + 1}: ${esc(phase.title)}</span>
+      <details class="phase roadmap__phase card" ${phase === firstOpen ? 'open' : ''}>
+        <summary class="phase__summary roadmap__summary">
+          <span class="roadmap__phase-copy"><small>FASE ${i + 1}</small><strong>${esc(phase.title)}</strong></span>
           <span class="phase__count">${done} de ${phase.modules.length} módulos</span>
         </summary>
-        <ul class="phase__modules">${rows}</ul>
+        <div class="roadmap__progress" role="progressbar" aria-label="Progresso da fase ${i + 1}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}">
+          <span style="width: ${pct}%"></span>
+        </div>
+        <ol class="roadmap__nodes">${rows}</ol>
       </details>`;
   }).join('');
 }
@@ -377,8 +416,16 @@ function moduleDetailHtml(module) {
     <p class="muted">${esc(phaseOf(module).title)}</p>`;
 
   if (status === 'bloqueado') {
-    const previous = ALL_MODULES[ALL_MODULES.indexOf(module) - 1];
+    const previous = ALL_MODULES.slice(0, ALL_MODULES.indexOf(module)).find((item) => !moduleCompleted(item));
     return header + emptyCard('Módulo bloqueado', `Conclua "${previous.title}" para liberar este módulo. Os fundamentos vêm primeiro.`);
+  }
+  if (status === 'validado') {
+    const lessonLinks = module.lessons.map((id) => `<li><a href="#sala-de-aula/${id}">Rever "${esc(DATA.lessons[id].title)}"</a></li>`).join('');
+    return `${header}<section class="card validation-card" role="status">
+      <h3 class="subhead">Conhecimento validado</h3>
+      <p>Você demonstrou este conteúdo no teste de nivelamento. Pode avançar sem refazer as aulas e exercícios deste módulo.</p>
+      ${lessonLinks ? `<ul class="checklist__sub">${lessonLinks}</ul>` : ''}
+    </section>`;
   }
   if (!hasContent(module)) {
     return header + emptyCard('Conteúdo em breve', 'As aulas, exercícios e a prova deste módulo ainda estão sendo preparados.');
@@ -481,9 +528,12 @@ function renderSala(lessonId) {
     return;
   }
   const items = Object.values(DATA.lessons).map((l) => {
-    const module = ALL_MODULES.find((m) => m.lessons.includes(l.id));
+    const module = moduleForLesson(l.id);
     if (moduleLocked(module)) return '';
-    return `<li><a class="module" href="#sala-de-aula/${l.id}"><span class="module__title">${esc(l.title)}<span class="module__sub">${esc(phaseOf(module).title)}</span></span>${lessonDone(l.id) ? pill('Concluída', 'ok') : pill('Disponível', 'blue')}</a></li>`;
+    const status = lessonDone(l.id) ? pill('Concluída', 'ok')
+      : lessonValidated(l.id) ? pill('Validada', 'ok')
+      : pill('Disponível', 'blue');
+    return `<li><a class="module" href="#sala-de-aula/${l.id}"><span class="module__title">${esc(l.title)}<span class="module__sub">${esc(phaseOf(module).title)}</span></span>${status}</a></li>`;
   }).join('');
   view('sala').innerHTML = `<p class="muted intro">Escolha uma aula. Cada sessão tem 40 minutos: 10 de teoria, 20 de prática, 5 de quiz e 5 de revisão.</p><ul class="phase__modules card">${items}</ul>`;
 }
@@ -492,10 +542,11 @@ function lessonHtml(lesson, module) {
   const section = (title, body) => `<section class="lesson__section"><h3 class="lesson__heading">${title}</h3>${body}</section>`;
   const materials = (DATA.materials[lesson.id] ?? []).map(materialItemHtml).join('');
   const done = lessonDone(lesson.id);
+  const validated = lessonValidated(lesson.id);
   return `
     <a class="back" href="#trilha/${module.id}">Voltar ao módulo</a>
     <article class="lesson">
-      <h2 class="section-title">${esc(lesson.title)} ${done ? pill('Concluída', 'ok') : ''}</h2>
+      <h2 class="section-title">${esc(lesson.title)} ${done ? pill('Concluída', 'ok') : validated ? pill('Validada', 'ok') : ''}</h2>
       ${section('Objetivo de aprendizagem', `<p>${esc(lesson.objective)}</p>`)}
       ${section('Explicação conceitual', lesson.concept.map((p) => `<p>${rich(p)}</p>`).join(''))}
       ${section('Analogia do dia a dia', `<p class="callout">${rich(lesson.analogy)}</p>`)}
@@ -516,6 +567,11 @@ function lessonHtml(lesson, module) {
           <button class="button button--ghost" type="button" data-action="retry" hidden>Refazer quiz</button>
         </form>`)}
       ${section('Material complementar', materials ? `<ul class="materials">${materials}</ul>` : '<p class="muted">Em breve.</p>')}
+      <section class="lesson__completion" aria-label="Conclusão da aula">
+        <button class="button" type="button" data-action="complete-lesson" data-lesson="${lesson.id}"${done || validated ? ' hidden' : ''}>Terminei</button>
+        <p class="muted" data-lesson-hint${done || validated ? ' hidden' : ''}>Responda todas as perguntas do quiz para liberar a conclusão da aula.</p>
+        <p class="feedback feedback--ok" data-lesson-completed role="status"${done || validated ? '' : ' hidden'}>${validated && !done ? 'Aula validada pelo teste de nivelamento.' : 'Aula concluída. Sua missão foi registrada.'}</p>
+      </section>
     </article>`;
 }
 
@@ -524,6 +580,8 @@ const TYPE_LABELS = { choice: 'Múltipla escolha', bool: 'Verdadeiro ou falso', 
 
 function exerciseHtml(ex) {
   const state = progress.exercises[ex.id];
+  const module = moduleForLesson(ex.lesson);
+  const validated = moduleValidated(module);
   const options = ex.type === 'bool' ? ['Verdadeiro', 'Falso'] : ex.options;
   let field;
   if (options) {
@@ -537,13 +595,14 @@ function exerciseHtml(ex) {
     <form class="card exercise" data-form="exercise" data-ex="${ex.id}" novalidate>
       <div class="exercise__meta">
         ${pill(TYPE_LABELS[ex.type])}${pill(ex.level, 'blue')}
-        <span data-badge>${state?.done ? pill('Concluído', 'ok') : state ? pill('Tentativa feita') : pill('Pendente')}</span>
+        <span data-badge>${state?.done ? pill('Concluído', 'ok') : validated ? pill('Validado no teste', 'ok') : state ? pill('Tentativa feita') : pill('Pendente')}</span>
       </div>
       <p class="exercise__prompt">${rich(ex.prompt)}</p>
       ${ex.code ? codeBlock(ex.code) : ''}
       ${field}
       <p class="feedback" role="status" hidden></p>
       <button class="button" type="submit">Conferir</button>
+      <button class="button button--ghost" type="button" data-action="complete-exercise" hidden>Terminei</button>
     </form>`;
 }
 
@@ -556,7 +615,7 @@ function renderExercicios() {
   }).join('');
   const done = DATA.exercises.filter((e) => exerciseDone(e.id)).length;
   view('exercicios').innerHTML = `
-    <p class="muted intro">Responda e clique em Conferir. A explicação aparece depois da sua tentativa, e você pode tentar de novo. Concluídos: ${done} de ${DATA.exercises.length}.</p>
+    <p class="muted intro">Responda e clique em Conferir para ver a explicação. Depois, clique em Terminei para registrar a missão. Concluídos: <strong id="exercise-completion-count">${done}</strong> de ${DATA.exercises.length}.</p>
     ${sections}`;
 }
 
@@ -681,6 +740,13 @@ function handleQuiz(form) {
   progress.lessons[lesson.id] = record;
   saveProgress();
 
+  if (record.completedAt) {
+    const lessonElement = form.closest('.lesson');
+    $('[data-action="complete-lesson"]', lessonElement).hidden = true;
+    $('[data-lesson-hint]', lessonElement).hidden = true;
+    $('[data-lesson-completed]', lessonElement).hidden = false;
+  }
+
   markQuestions(form, lesson.quiz, grade.answers);
   const result = $('[data-result]', form);
   result.hidden = false;
@@ -710,12 +776,69 @@ function handleExercise(form) {
   state.attempts += 1;
   state.at = Date.now();
   if (correct && !state.done) logActivity(`Acertou um exercício de "${DATA.lessons[ex.lesson].title}" (${TYPE_LABELS[ex.type].toLowerCase()})`);
-  if (correct) state.done = true;
   progress.exercises[ex.id] = state;
   saveProgress();
 
   setFeedback(feedback, correct ? 'ok' : 'bad', `${correct ? 'Correto.' : 'Ainda não.'} ${ex.explain}`);
   $('[data-badge]', form).innerHTML = state.done ? pill('Concluído', 'ok') : pill('Tentativa feita');
+}
+
+function exerciseHasAnswer(ex, form) {
+  if (ex.type === 'choice' || ex.type === 'error' || ex.type === 'bool') {
+    return Boolean($('input:checked', form));
+  }
+  return Boolean(form.elements.answer.value.trim());
+}
+
+function updateCompletionButton(form) {
+  if (form.dataset.form === 'exercise') {
+    const ex = DATA.exercises.find((item) => item.id === form.dataset.ex);
+    const button = $('[data-action="complete-exercise"]', form);
+    button.hidden = exerciseDone(ex.id) || !exerciseHasAnswer(ex, form);
+  } else if (form.dataset.form === 'quiz') {
+    const lesson = DATA.lessons[form.dataset.lesson];
+    const button = $('[data-action="complete-lesson"]', form.closest('.lesson'));
+    button.hidden = lessonDone(lesson.id) || gradeQuestions(form, lesson.quiz, 'quiz').answers.includes(-1);
+  }
+}
+
+function completeExercise(form) {
+  const exercise = DATA.exercises.find((item) => item.id === form.dataset.ex);
+  if (!exerciseHasAnswer(exercise, form)) {
+    setFeedback($('.feedback', form), 'bad', 'Responda ao exercício antes de concluir a missão.');
+    return;
+  }
+
+  const state = progress.exercises[exercise.id] ?? { attempts: 0, done: false };
+  if (!state.done) {
+    state.done = true;
+    state.completedAt = Date.now();
+    logActivity(`Concluiu o exercício "${exercise.prompt}"`);
+  }
+  progress.exercises[exercise.id] = state;
+  saveProgress();
+
+  $('[data-badge]', form).innerHTML = pill('Concluído', 'ok');
+  setFeedback($('.feedback', form), 'ok', 'Exercício concluído. Missão marcada como terminada.');
+  $('[data-action="complete-exercise"]', form).hidden = true;
+  const count = $('#exercise-completion-count');
+  if (count) count.textContent = String(DATA.exercises.filter((item) => exerciseDone(item.id)).length);
+}
+
+function completeLesson(lessonId) {
+  const lesson = DATA.lessons[lessonId];
+  const quizForm = $(`[data-form="quiz"][data-lesson="${lessonId}"]`);
+  const answersComplete = lesson.quiz.every((_, index) => $(`input[name="quiz-${index}"]:checked`, quizForm));
+  if (!answersComplete) return;
+
+  const record = progress.lessons[lessonId] ?? { attempts: 0, quizBest: 0 };
+  if (!record.completedAt) {
+    record.completedAt = Date.now();
+    progress.lessons[lessonId] = record;
+    logActivity(`Concluiu a aula "${lesson.title}"`);
+    saveProgress();
+  }
+  route({ moveFocus: false });
 }
 
 function handleExam(form) {
@@ -812,6 +935,8 @@ document.addEventListener('submit', (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target;
+  const completionForm = target.closest('form[data-form="exercise"], form[data-form="quiz"]');
+  if (completionForm) updateCompletionButton(completionForm);
   if (target.dataset.skill) handleSkillChange(target);
   else if (target.dataset.project) handleProjectChange(target);
   else if (target.dataset.note) {
@@ -820,10 +945,17 @@ document.addEventListener('change', (event) => {
   }
 });
 
+document.addEventListener('input', (event) => {
+  const form = event.target.closest('form[data-form="exercise"], form[data-form="quiz"]');
+  if (form) updateCompletionButton(form);
+});
+
 document.addEventListener('click', (event) => {
   const action = event.target.closest('[data-action]')?.dataset.action;
   if (action === 'reset') resetAll();
   if (action === 'retry') route({ moveFocus: false });   // redesenha a aula e libera o quiz
+  if (action === 'complete-exercise') completeExercise(event.target.closest('form[data-form="exercise"]'));
+  if (action === 'complete-lesson') completeLesson(event.target.dataset.lesson);
 });
 
 
@@ -833,6 +965,7 @@ document.addEventListener('click', (event) => {
    (ex.: #sala-de-aula/l-logica, #trilha/f1-m1).
    ========================================================================== */
 const PAGE_TITLES = {
+  'inicio': 'Início',
   'dashboard': 'Dashboard',
   'trilha': 'Trilha de Estudos',
   'sala-de-aula': 'Sala de Aula',
@@ -841,7 +974,7 @@ const PAGE_TITLES = {
   'carreira': 'Minha Carreira',
   'materiais': 'Materiais Complementares',
 };
-const DEFAULT_PAGE = 'dashboard';
+const DEFAULT_PAGE = 'inicio';
 
 function parseHash() {
   const [page, param] = window.location.hash.replace('#', '').split('/');
@@ -849,6 +982,7 @@ function parseHash() {
 }
 
 const RENDERERS = {
+  'inicio': () => {},
   'dashboard': renderDashboard,
   'trilha': renderTrilha,
   'sala-de-aula': renderSala,
@@ -859,6 +993,9 @@ const RENDERERS = {
 };
 
 function showPage(page, { moveFocus = true } = {}) {
+  const isWelcome = page === 'inicio';
+  $('#welcome-screen').hidden = !isWelcome;
+  $('#app-shell').hidden = isWelcome;
   $$('[data-page]').forEach((section) => { section.hidden = section.dataset.page !== page; });
   $$('[data-nav]').forEach((link) => {
     if (link.dataset.nav === page) link.setAttribute('aria-current', 'page');

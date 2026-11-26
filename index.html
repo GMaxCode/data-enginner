@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <meta name="theme-color" content="#0E1020">
+  <meta name="theme-color" content="#080911">
   <meta name="description" content="Plataforma pessoal de estudos em Engenharia de Dados e Análise de Dados.">
   <title>Dashboard | Data Journey Academy</title>
 
@@ -22,8 +22,8 @@
   <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
     <defs>
       <linearGradient id="grad-brand" x1="0" y1="0" x2="1" y2="1">
-        <stop offset="0" stop-color="#4C8DFF"/>
-        <stop offset="1" stop-color="#8B5CF6"/>
+        <stop offset="0" stop-color="#6675C9"/>
+        <stop offset="1" stop-color="#A855F7"/>
       </linearGradient>
     </defs>
     <symbol id="icon-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="9" rx="2"/><rect x="13.5" y="3" width="7.5" height="5.5" rx="2"/><rect x="13.5" y="11.5" width="7.5" height="9.5" rx="2"/><rect x="3" y="15" width="7.5" height="6" rx="2"/></symbol>
@@ -43,9 +43,25 @@
     <symbol id="icon-inbox" viewBox="0 0 24 24"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5h13L21 13v5.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V13z"/></symbol>
   </svg>
 
-  <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+  <section class="welcome-screen" id="welcome-screen" aria-labelledby="welcome-title">
+    <div class="welcome__atmosphere" aria-hidden="true">
+      <span class="welcome__orb welcome__orb--one"></span>
+      <span class="welcome__orb welcome__orb--two"></span>
+      <span class="welcome__orbit welcome__orbit--outer"></span>
+      <span class="welcome__orbit welcome__orbit--inner"></span>
+    </div>
+    <div class="welcome__content">
+      <p class="welcome__eyebrow">DATA JOURNEY ACADEMY</p>
+      <h1 id="welcome-title">Bem vindo ao<br><span>meu universo</span></h1>
+      <a class="welcome__start" href="#dashboard">
+        Start
+        <svg class="icon" aria-hidden="true"><use href="#icon-play"/></svg>
+      </a>
+    </div>
+  </section>
 
-  <div class="app">
+  <div class="app" id="app-shell" hidden>
+    <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
 
     <!-- ===== Barra superior (aparece só no celular) ===== -->
     <header class="topbar">
@@ -79,6 +95,7 @@
       <nav class="nav" aria-label="Navegação principal">
         <ul class="nav__list">
           <li><a class="nav__link" href="#dashboard" data-nav="dashboard"><svg class="icon" aria-hidden="true"><use href="#icon-dashboard"/></svg>Dashboard</a></li>
+          <li><a class="nav__link" href="#diagnostico" data-nav="diagnostico"><svg class="icon" aria-hidden="true"><use href="#icon-medal"/></svg>Teste de nivelamento</a></li>
           <li><a class="nav__link" href="#trilha" data-nav="trilha"><svg class="icon" aria-hidden="true"><use href="#icon-trail"/></svg>Trilha de Estudos</a></li>
           <li><a class="nav__link" href="#sala-de-aula" data-nav="sala-de-aula"><svg class="icon" aria-hidden="true"><use href="#icon-lesson"/></svg>Sala de Aula</a></li>
           <li><a class="nav__link" href="#exercicios" data-nav="exercicios"><svg class="icon" aria-hidden="true"><use href="#icon-exercise"/></svg>Exercícios</a></li>
@@ -106,19 +123,18 @@
           <h1 class="hero__title" id="dashboard-title"><span data-greeting>Olá</span>. Sua jornada em dados começa aqui.</h1>
           <p class="hero__text">Aprenda Python, SQL e engenharia de dados em sessões curtas. Seu progresso só avança quando você pratica e é avaliado, não quando abre uma aula.</p>
 
-          <!-- Trilha decorativa: um ponto para cada uma das 8 fases.
-               O primeiro ponto é o início; os demais ainda não foram alcançados. -->
+          <!-- Um ponto para cada fase; o progresso é atualizado a partir de aulas, provas e nivelamento. -->
           <figure class="trail">
-            <svg class="trail__svg" viewBox="0 0 640 110" role="img" aria-label="Trilha com 8 fases, da lógica de programação ao portfólio profissional. Nenhuma fase concluída ainda.">
+            <svg class="trail__svg" viewBox="0 0 640 110" role="img" aria-label="Trilha com 8 fases, da lógica de programação ao portfólio profissional.">
               <path class="trail__path" d="M40 80 C80 80 80 40 120 40 S160 76 200 76 S240 36 280 36 S320 72 360 72 S400 34 440 34 S480 70 520 70 S560 30 600 30"/>
-              <circle class="trail__dot trail__dot--start" cx="40" cy="80" r="9"/>
-              <circle class="trail__dot" cx="120" cy="40" r="6"/>
-              <circle class="trail__dot" cx="200" cy="76" r="6"/>
-              <circle class="trail__dot" cx="280" cy="36" r="6"/>
-              <circle class="trail__dot" cx="360" cy="72" r="6"/>
-              <circle class="trail__dot" cx="440" cy="34" r="6"/>
-              <circle class="trail__dot" cx="520" cy="70" r="6"/>
-              <circle class="trail__dot" cx="600" cy="30" r="6"/>
+              <circle class="trail__dot trail__dot--start" data-trail-step="1" cx="40" cy="80" r="9"/>
+              <circle class="trail__dot" data-trail-step="2" cx="120" cy="40" r="6"/>
+              <circle class="trail__dot" data-trail-step="3" cx="200" cy="76" r="6"/>
+              <circle class="trail__dot" data-trail-step="4" cx="280" cy="36" r="6"/>
+              <circle class="trail__dot" data-trail-step="5" cx="360" cy="72" r="6"/>
+              <circle class="trail__dot" data-trail-step="6" cx="440" cy="34" r="6"/>
+              <circle class="trail__dot" data-trail-step="7" cx="520" cy="70" r="6"/>
+              <circle class="trail__dot" data-trail-step="8" cx="600" cy="30" r="6"/>
             </svg>
             <figcaption class="trail__caption">
               <span>Fase 1: Fundamentos de Python</span>
@@ -127,13 +143,25 @@
           </figure>
         </div>
 
+        <section class="card placement-card" aria-labelledby="placement-title">
+          <div class="placement-card__copy">
+            <p class="placement-card__eyebrow">SEU PONTO DE PARTIDA</p>
+            <h2 class="card__title" id="placement-title">Já domina parte do conteúdo?</h2>
+            <p class="muted" id="diag-summary" role="status">Faça uma avaliação inicial e avance direto no que você já conhece.</p>
+          </div>
+          <div class="placement-card__actions">
+            <a class="button" href="#diagnostico">Avaliar meu conhecimento</a>
+            <a class="button button--ghost" id="diag-report" href="#diagnostico/relatorio" hidden>Ver relatório</a>
+          </div>
+        </section>
+
         <!-- Indicadores gerais. Os valores vêm do objeto "state" em script.js -->
         <h2 class="sr-only">Resumo dos estudos</h2>
         <ul class="stats">
           <li class="stat">
             <span class="stat__icon stat__icon--blue"><svg class="icon" aria-hidden="true"><use href="#icon-check"/></svg></span>
             <span class="stat__value" data-stat="lessonsCompleted">0</span>
-            <span class="stat__label">Aulas concluídas</span>
+            <span class="stat__label">Aulas concluídas ou validadas</span>
           </li>
           <li class="stat">
             <span class="stat__icon stat__icon--violet"><svg class="icon" aria-hidden="true"><use href="#icon-pencil"/></svg></span>
@@ -143,7 +171,7 @@
           <li class="stat">
             <span class="stat__icon stat__icon--blue"><svg class="icon" aria-hidden="true"><use href="#icon-medal"/></svg></span>
             <span class="stat__value" data-stat="modulesCompleted">0</span>
-            <span class="stat__label">Módulos concluídos</span>
+            <span class="stat__label">Módulos concluídos ou validados</span>
           </li>
           <li class="stat">
             <span class="stat__icon stat__icon--violet"><svg class="icon" aria-hidden="true"><use href="#icon-clock"/></svg></span>
@@ -223,6 +251,11 @@
         <div id="view-trilha"></div>
       </section>
 
+      <section class="page" id="page-diagnostico" data-page="diagnostico" aria-labelledby="diagnostico-title" hidden>
+        <h1 class="page__title" id="diagnostico-title">Teste de nivelamento</h1>
+        <div id="view-diagnostico"></div>
+      </section>
+
       <section class="page" id="page-sala-de-aula" data-page="sala-de-aula" aria-labelledby="aula-title" hidden>
         <h1 class="page__title" id="aula-title">Sala de Aula</h1>
         <div id="view-sala"></div>
@@ -252,6 +285,8 @@
   </div>
 
   <script src="data.js"></script>
+  <script src="diagnostic-data.js"></script>
   <script src="script.js"></script>
+  <script src="diagnostic.js"></script>
 </body>
 </html>

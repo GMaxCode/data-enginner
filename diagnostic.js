@@ -12,6 +12,8 @@
    REGRAS PEDAGÓGICAS (resumo do que o código faz):
    - Cada tópico tem uma pergunta de conceito e uma de código. Só é
      "demonstrado" se as duas estiverem certas.
+   - Um módulo só é validado quando todos os tópicos ligados a ele forem
+     demonstrados na avaliação.
    - Uma área só vira "Dominado" com 83% ou mais, boa prática e esse
      desempenho repetido em dois dias diferentes.
    - Sem o pré-requisito sólido, o resultado da área fica limitado a
@@ -108,6 +110,23 @@ function saveAttempt(area, answers) {
     const stat = store.qstats[question.id] ?? { right: 0, wrong: 0 };
     if (answers[question.id] === question.answer) stat.right += 1; else stat.wrong += 1;
     store.qstats[question.id] = stat;
+  });
+
+  const topicResults = new Map(result.topics.map((topic) => [topic.id, topic]));
+  const moduleIds = new Set(area.topics.map((topic) => topic.module).filter(Boolean));
+  progress.validatedModules ??= {};
+  moduleIds.forEach((moduleId) => {
+    const mappedTopics = area.topics.filter((topic) => topic.module === moduleId);
+    if (!mappedTopics.every((topic) => topicResults.get(topic.id)?.status === 'demonstrado')) return;
+    const module = findModule(moduleId);
+    if (!module) throw new Error(`O diagnóstico referencia um módulo inexistente: ${moduleId}`);
+    if (moduleCompleted(module)) return;
+    progress.validatedModules[moduleId] = {
+      areaId: area.id,
+      topics: mappedTopics.map((topic) => topic.id),
+      at: Date.now(),
+    };
+    logActivity(`Validou o módulo "${module.title}" no teste de nivelamento`);
   });
 
   logActivity(`Fez o diagnóstico de ${area.name}: ${result.pct}%`);
@@ -245,7 +264,7 @@ function renderHub() {
   }).join('');
 
   diagView().innerHTML = `
-    <p class="muted intro">Cada área mistura perguntas de conceito e de interpretação de código. Uma resposta certa não basta: o assunto só é demonstrado quando teoria e prática estão certas. Você pode refazer quando quiser.</p>
+    <p class="muted intro">Você não precisa assistir às aulas antes. Cada área mistura perguntas de conceito e de interpretação de código; quando todos os tópicos de um módulo são demonstrados, ele fica validado. A trilha mantém a ordem dos pré-requisitos e mostra primeiro o que ainda falta. Você pode refazer as avaliações quando quiser.</p>
     ${anyAttempt ? '<a class="button" href="#diagnostico/relatorio" style="justify-self:start">Ver relatório de competências</a>' : ''}
     <div class="area-grid">${cards}</div>`;
 }
@@ -296,6 +315,7 @@ function renderResult(areaId, attempt) {
       <div class="module-head"><h2 class="section-title" id="result-title" tabindex="-1">${esc(area.name)}: ${attempt.pct}%</h2>
         ${pill(skillLabel(result.status), statusKind(result.status))}</div>
       <p>Você acertou ${attempt.correct} de ${attempt.total} perguntas. ${esc(statusMessage(result))}</p>
+      <p class="muted">Os módulos são validados quando todos os tópicos ligados a eles forem demonstrados. A trilha respeita os pré-requisitos; use as recomendações para estudar apenas o que faltou.</p>
       <div class="meters">${meterHtml('Conhecimento teórico', attempt.theoryPct, 'blue')}${meterHtml('Capacidade prática', attempt.practicePct, 'violet')}</div>
       <div class="area__topics">${attempt.topics.map((t) => {
         const topic = area.topics.find((x) => x.id === t.id);
@@ -317,6 +337,7 @@ function renderResult(areaId, attempt) {
 function studiedLabel(topic) {
   if (!topic.module) return pill('Sem aula na trilha');
   const module = findModule(topic.module);
+  if (moduleValidated(module)) return pill('Validado no teste', 'ok');
   if (moduleCompleted(module)) return pill('Módulo concluído', 'ok');
   return hasContent(module) ? pill('Não concluído') : pill('Aula em breve');
 }
@@ -424,6 +445,12 @@ function renderDiagnosticCard() {
   const report = $('#diag-report');
   report.hidden = !evaluated;
 }
+
+const renderDashboardWithoutDiagnostic = RENDERERS.dashboard;
+RENDERERS.dashboard = () => {
+  renderDashboardWithoutDiagnostic();
+  renderDiagnosticCard();
+};
 
 // Registra a nova página no roteador do script.js
 PAGE_TITLES.diagnostico = 'Diagnóstico de Conhecimento';
