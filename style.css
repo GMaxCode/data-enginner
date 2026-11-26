@@ -154,7 +154,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .brand__text { display: flex; flex-direction: column; line-height: 1.15; }
 .brand__name { font-family: var(--font-display); font-weight: 700; font-size: 1.05rem; }
 .brand__sub  { font-size: .85rem; color: var(--muted); }
-.brand__close { display: none; margin-left: auto; }
+.icon-button.brand__close { display: none; margin-left: auto; }
 
 /* Lista de navegação */
 .nav__list { display: flex; flex-direction: column; gap: 4px; }
@@ -336,7 +336,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 /* ----- Dashboard: estatísticas ----- */
 .stats {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(165px, 1fr));
   gap: var(--gap);
   margin-bottom: var(--gap);
 }
@@ -497,14 +497,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* Notebook pequeno / tablet horizontal */
 @media (max-width: 1100px) {
-  .stats { grid-template-columns: repeat(2, 1fr); }
   .split { grid-template-columns: 1fr; }
 }
 
 /* Tablet vertical e celular: sidebar vira menu deslizante */
 @media (max-width: 900px) {
   .topbar { display: flex; }
-  .brand__close { display: grid; }
+  .icon-button.brand__close { display: grid; }
   .overlay { display: block; opacity: 0; visibility: hidden; transition: opacity .25s var(--ease), visibility .25s; }
 
   .sidebar {
@@ -531,6 +530,140 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .stat__value { font-size: 1.3rem; }
   .card { padding: 20px; }
   .trail__caption { flex-direction: column; gap: 2px; }
+}
+
+
+/* ==========================================================================
+   8. TELAS DE CONTEÚDO (trilha, aula, exercícios, projetos, carreira, materiais)
+   ========================================================================== */
+:root { --ok: #3DDC97; --bad: #FF7A8A; }
+
+/* Cada tela empilha seus blocos com o mesmo espaçamento */
+.page > div[id^="view-"] { display: grid; gap: var(--gap); }
+
+.muted { color: var(--muted); }
+.intro { max-width: 70ch; }
+.section-title { font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; }
+.subhead { font-family: var(--font-display); font-size: 1.05rem; font-weight: 600; margin-bottom: 10px; }
+.back { color: var(--blue); font-weight: 500; justify-self: start; }
+.back:hover { text-decoration: underline; }
+.module-head { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+
+code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: .92em; background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
+.code { margin: 12px 0; padding: 16px; overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius-md); line-height: 1.55; }
+.code code { padding: 0; background: none; font-size: .9rem; }
+
+/* Selos */
+.pill--ok { border-color: transparent; background: rgba(61, 220, 151, .14); color: var(--ok); }
+.pill--blue { border-color: transparent; background: rgba(76, 141, 255, .14); color: #8DB6FF; }
+
+/* ----- Trilha ----- */
+.phase { padding: 0; }
+.phase__summary { display: flex; justify-content: space-between; gap: 12px; padding: 18px 24px; cursor: pointer; list-style: none; }
+.phase__summary::-webkit-details-marker { display: none; }
+.phase__title { font-family: var(--font-display); font-weight: 600; }
+.phase__count { color: var(--muted); font-size: .9rem; white-space: nowrap; }
+.phase__modules { display: grid; gap: 4px; padding: 0 12px 12px; }
+.card.phase__modules, ul.phase__modules.card { padding: 12px; }
+.module { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border-radius: var(--radius-md); transition: background-color .2s var(--ease); }
+a.module:hover { background: var(--surface-2); }
+.module--locked { color: var(--muted); }
+.module__title { display: flex; flex-direction: column; }
+.module__sub { color: var(--muted); font-size: .85rem; }
+
+.checklist { display: grid; gap: 12px; }
+.checklist > li { padding-left: 28px; position: relative; }
+.checklist > li::before { content: ""; position: absolute; left: 0; top: 5px; width: 16px; height: 16px; border: 2px solid var(--line); border-radius: 50%; }
+.checklist > li.is-done::before { background: var(--ok); border-color: var(--ok); }
+.checklist a { color: var(--blue); margin-left: 8px; }
+.checklist__sub { display: grid; gap: 6px; margin-top: 8px; }
+.checklist__sub a { margin-left: 0; }
+
+.table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+.table th, .table td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--line); }
+.table th { color: var(--muted); font-weight: 500; }
+
+/* ----- Aula ----- */
+.lesson { display: grid; gap: 8px; max-width: 78ch; }
+.lesson__section { margin-top: 20px; }
+.lesson__heading { font-family: var(--font-display); font-size: 1.05rem; margin-bottom: 8px; }
+.lesson__section p + p { margin-top: 10px; }
+.callout { padding: 16px 18px; background: var(--surface); border-left: 3px solid var(--violet); border-radius: 0 var(--radius-md) var(--radius-md) 0; }
+.commands dt { font-weight: 600; margin-top: 12px; }
+.commands dd { margin: 2px 0 0; color: var(--muted); }
+
+/* ----- Formulários ----- */
+.field { display: grid; gap: 6px; font-size: .9rem; color: var(--muted); margin: 12px 0; }
+input[type="text"], input[type="url"], input[type="number"], select, textarea {
+  width: 100%; padding: 10px 12px; background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: var(--radius-md); font: inherit;
+}
+textarea { resize: vertical; font-family: ui-monospace, Consolas, monospace; font-size: .92rem; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+
+.question { margin: 0 0 20px; padding: 0; border: 0; }
+.question legend { padding: 0; margin-bottom: 8px; font-weight: 600; }
+.option { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; margin-bottom: 6px; border: 1px solid var(--line); border-radius: var(--radius-md); cursor: pointer; }
+.option:hover { background: var(--surface-2); }
+.option input { margin-top: 5px; accent-color: var(--violet); }
+
+.feedback { margin: 10px 0; padding: 10px 14px; border-radius: var(--radius-md); white-space: pre-line; }
+.feedback[hidden] { display: none; }
+.feedback--ok { background: rgba(61, 220, 151, .12); color: var(--ok); }
+.feedback--bad { background: rgba(255, 122, 138, .12); color: var(--bad); }
+.result-text { margin: 12px 0; font-weight: 600; }
+.button--ghost { background: transparent; border: 1px solid var(--line); }
+.button--ghost:hover { box-shadow: none; background: var(--surface-2); }
+.link-button { margin: 8px 6px 0; padding: 8px; background: none; border: 0; color: var(--muted); font-size: .85rem; text-align: left; text-decoration: underline; }
+.link-button:hover { color: var(--text); }
+
+.review { display: grid; gap: 16px; padding-left: 20px; list-style: decimal; }
+.review li { padding-left: 8px; }
+.review .is-ok { border-left: 3px solid var(--ok); padding-left: 14px; }
+.review .is-bad { border-left: 3px solid var(--bad); padding-left: 14px; }
+.result:focus { outline: none; }
+
+/* ----- Dashboard: estudo de hoje ----- */
+.today { display: flex; flex-wrap: wrap; align-items: end; gap: 16px 24px; margin-bottom: var(--gap); }
+.today__text { flex: 1 1 240px; }
+.today .field { margin: 0; flex: 0 0 160px; }
+.today .feedback { flex-basis: 100%; margin: 0; }
+
+/* ----- Exercícios ----- */
+.exercise { margin-bottom: var(--gap); }
+.exercise__meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.exercise__prompt { font-weight: 600; margin-bottom: 8px; }
+section > .section-title { margin: 12px 0 16px; }
+
+/* ----- Projetos ----- */
+.project { display: grid; gap: 12px; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.project__cols { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
+.bullets { display: grid; gap: 6px; padding-left: 18px; list-style: disc; color: var(--muted); }
+.project__form { display: grid; grid-template-columns: 200px 1fr; gap: 16px; }
+.project__form .field { margin: 0; }
+
+/* ----- Carreira ----- */
+.career { display: grid; gap: 20px; }
+.meters { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+.meters__label { display: flex; justify-content: space-between; margin-bottom: 6px; color: var(--muted); font-size: .9rem; }
+.meter { height: 8px; background: var(--surface-2); border-radius: var(--radius-pill); overflow: hidden; }
+.meter__fill { height: 100%; border-radius: inherit; transition: width .6s var(--ease); }
+.meter__fill--blue { background: var(--blue); }
+.meter__fill--violet { background: var(--violet); }
+.skills { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px 32px; }
+.skill { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.skill select { width: auto; min-width: 150px; }
+
+/* ----- Materiais ----- */
+.materials { display: grid; gap: 12px; }
+.materials a { color: var(--blue); font-weight: 500; }
+.materials a:hover { text-decoration: underline; }
+.materials__meta { display: inline-flex; gap: 6px; margin-left: 10px; }
+
+@media (max-width: 700px) {
+  .project__cols, .meters, .skills, .project__form { grid-template-columns: 1fr; }
+  .materials__meta { display: flex; margin: 6px 0 0; }
 }
 
 

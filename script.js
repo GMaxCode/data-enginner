@@ -1,294 +1,918 @@
 /* ==========================================================================
    DATA JOURNEY ACADEMY — script.js
-   Organização:
-   1. Estado da aplicação (dados)
-   2. Funções auxiliares
-   3. Renderização do Dashboard
-   4. Navegação entre páginas
-   5. Menu lateral no celular
-   6. Inicialização
+   Depende de data.js (objeto DATA com o conteúdo).
 
-   Ideia central: os DADOS ficam no objeto "state" e as funções "render..."
-   apenas desenham esses dados na tela. Na etapa de persistência, só será
-   preciso trocar a origem do "state" (LocalStorage) sem mexer na tela.
+   Organização:
+   1. Persistência (LocalStorage)
+   2. Funções auxiliares
+   3. Regras de progresso (o "cérebro" da plataforma)
+   4. Telas (cada uma devolve HTML a partir dos dados)
+   5. Ações do usuário (quiz, exercício, prova, projeto, carreira)
+   6. Navegação e menu
+   7. Inicialização
+
+   Ideia central: DADOS (progress + DATA) -> REGRAS (seção 3) -> TELAS (seção 4).
+   Para trocar o LocalStorage por um banco no futuro, só a seção 1 muda.
    ========================================================================== */
 
 'use strict';
 
 
 /* ==========================================================================
-   1. ESTADO DA APLICAÇÃO
-   Nesta primeira entrega tudo começa zerado e sem avaliação.
-   Nenhum percentual é inventado: "evaluated: false" significa que ainda
-   não existe base (provas, exercícios, projetos) para calcular a evolução.
+   1. PERSISTÊNCIA
+   Tudo o que o aluno faz fica em um único objeto: "progress".
    ========================================================================== */
-const state = {
-  // Indicadores gerais do Dashboard
-  stats: {
-    lessonsCompleted: 0,
-    exercisesDone: 0,
-    modulesCompleted: 0,
-    studyMinutes: 0,
-  },
+const STORAGE_KEY = 'dja:v1';
+const PASS_EXAM = 70;   // nota mínima da prova (0 a 100)
+const PASS_QUIZ = 60;   // percentual mínimo do quiz da aula
 
-  // Evolução por carreira. Os totais vêm do plano de competências do projeto.
-  tracks: [
-    { id: 'engineering', name: 'Engenharia de Dados', evaluated: false, percent: null, level: null, skillsMastered: 0, skillsTotal: 11 },
-    { id: 'analysis',    name: 'Análise de Dados',    evaluated: false, percent: null, level: null, skillsMastered: 0, skillsTotal: 9  },
-  ],
+function defaultProgress() {
+  return {
+    lessons: {},     // id da aula   -> { completedAt, quizBest, attempts }
+    exercises: {},   // id exercício -> { done, attempts, at }
+    exams: {},       // id módulo    -> [ { at, correct, total, pct, answers } ]
+    skills: {},      // id competência -> status
+    projects: {},    // id projeto   -> { status, github }
+    notes: {},       // id aula      -> texto do desafio
+    studyLog: {},    // 'AAAA-MM-DD' -> minutos estudados
+    activity: [],    // [ { text, at } ]
+  };
+}
 
-  // Primeira aula da trilha (Fase 1)
-  nextLesson: {
-    phase: 'Fase 1: Fundamentos de Python',
-    title: 'Lógica de programação',
-    goal: 'Entender como transformar um problema em passos que o computador consegue executar.',
-  },
+function loadProgress() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? { ...defaultProgress(), ...JSON.parse(raw) } : defaultProgress();
+  } catch (error) {
+    console.warn('Não foi possível ler os dados salvos. Começando do zero.', error);
+    return defaultProgress();
+  }
+}
 
-  // Cada item futuro terá o formato: { text: 'Concluiu a aula X', time: 'há 2 h' }
-  recentActivities: [],
-};
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  } catch (error) {
+    console.warn('Não foi possível salvar o progresso.', error);
+  }
+}
+
+let progress = loadProgress();
+
+// Estado temporário da tela (não é salvo): revisão da última prova
+const viewState = { review: null };
 
 
 /* ==========================================================================
    2. FUNÇÕES AUXILIARES
    ========================================================================== */
-
-/** Atalho para document.querySelector. */
 const $  = (selector, root = document) => root.querySelector(selector);
-/** Atalho para document.querySelectorAll (já devolve um Array). */
 const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
 
-/** Converte minutos em texto: 0 -> "0 min", 65 -> "1h 05min". */
-function formatMinutes(totalMinutes) {
-  if (totalMinutes < 60) return `${totalMinutes} min`;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = String(totalMinutes % 60).padStart(2, '0');
-  return `${hours}h ${minutes}min`;
+/** Escapa HTML: obrigatório para qualquer texto digitado pelo usuário. */
+const esc = (text) => String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/** Escapa e transforma `trecho` em <code>trecho</code>. */
+const rich = (text) => esc(text).replace(/`([^`]+)`/g, '<code>$1</code>');
+
+const codeBlock = (code) => `<pre class="code"><code>${esc(code)}</code></pre>`;
+
+function formatMinutes(total) {
+  if (total < 60) return `${total} min`;
+  return `${Math.floor(total / 60)}h ${String(total % 60).padStart(2, '0')}min`;
 }
 
-/** Saudação de acordo com a hora do dia. */
-function getGreeting(date = new Date()) {
-  const hour = date.getHours();
+function getGreeting() {
+  const hour = new Date().getHours();
   if (hour < 12) return 'Bom dia';
   if (hour < 18) return 'Boa tarde';
   return 'Boa noite';
 }
 
-/** Cria um elemento com classe e texto (textContent evita injetar HTML). */
-function createElement(tag, className, text) {
-  const element = document.createElement(tag);
-  if (className) element.className = className;
-  if (text !== undefined) element.textContent = text;
-  return element;
+function dayKey(date = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
+}
+
+function relativeTime(timestamp) {
+  const minutes = Math.floor((Date.now() - timestamp) / 60000);
+  if (minutes < 1) return 'agora';
+  if (minutes < 60) return `há ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `há ${hours} h`;
+  return `há ${Math.floor(hours / 24)} d`;
+}
+
+function formatDate(timestamp) {
+  return new Date(timestamp).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function logActivity(text) {
+  progress.activity.unshift({ text, at: Date.now() });
+  progress.activity = progress.activity.slice(0, 20);
+}
+
+function setFeedback(element, kind, text) {
+  element.hidden = false;
+  element.className = `feedback feedback--${kind}`;
+  element.textContent = text;
 }
 
 
 /* ==========================================================================
-   3. RENDERIZAÇÃO DO DASHBOARD
+   3. REGRAS DE PROGRESSO
    ========================================================================== */
+const ALL_MODULES = DATA.phases.flatMap((phase) => phase.modules);
+const findModule = (id) => ALL_MODULES.find((m) => m.id === id);
+const phaseOf = (module) => DATA.phases.find((p) => p.modules.includes(module));
 
-/** Saudação do topo. */
-function renderGreeting() {
-  $('[data-greeting]').textContent = getGreeting();
+const hasContent = (module) => module.lessons.length > 0;
+const lessonDone = (id) => Boolean(progress.lessons[id]?.completedAt);
+const exerciseDone = (id) => Boolean(progress.exercises[id]?.done);
+const exercisesOf = (module) => DATA.exercises.filter((e) => module.lessons.includes(e.lesson));
+const attemptsOf = (module) => progress.exams[module.id] ?? [];
+const bestExam = (module) => Math.max(0, ...attemptsOf(module).map((a) => a.pct));
+const examPassed = (module) => bestExam(module) >= PASS_EXAM;
+
+/** Pré-requisitos da prova: todas as aulas concluídas e todos os exercícios feitos. */
+function requirementsMet(module) {
+  return module.lessons.every(lessonDone) && exercisesOf(module).every((e) => exerciseDone(e.id));
 }
 
-/** Cards de estatísticas: procura elementos com data-stat="nome". */
-function renderStats() {
-  $$('[data-stat]').forEach((element) => {
-    const key = element.dataset.stat;
-    const value = state.stats[key];
-    element.textContent = key === 'studyMinutes' ? formatMinutes(value) : String(value);
+/** Módulo concluído = atividades obrigatórias + aprovação na prova. */
+function moduleCompleted(module) {
+  return hasContent(module) && requirementsMet(module) && examPassed(module);
+}
+
+/** Um módulo só abre quando o anterior (na ordem da trilha) está concluído. */
+function moduleLocked(module) {
+  const index = ALL_MODULES.indexOf(module);
+  return index > 0 && !moduleCompleted(ALL_MODULES[index - 1]);
+}
+
+function moduleStatus(module) {
+  if (moduleCompleted(module)) return 'concluido';
+  if (moduleLocked(module)) return 'bloqueado';
+  if (!hasContent(module)) return 'em-breve';
+  const started = module.lessons.some((id) => progress.lessons[id]) || exercisesOf(module).some((e) => progress.exercises[e.id]);
+  return started ? 'andamento' : 'disponivel';
+}
+
+const STATUS_LABELS = {
+  'concluido':  ['Concluído', 'ok'],
+  'andamento':  ['Em andamento', 'blue'],
+  'disponivel': ['Disponível', 'blue'],
+  'em-breve':   ['Conteúdo em breve', ''],
+  'bloqueado':  ['Bloqueado', ''],
+};
+const pill = (text, kind = '') => `<span class="pill${kind ? ` pill--${kind}` : ''}">${esc(text)}</span>`;
+const statusPill = (status) => pill(...STATUS_LABELS[status]);
+
+/** Indicadores gerais do Dashboard. */
+function computeStats() {
+  return {
+    lessonsCompleted: Object.keys(DATA.lessons).filter(lessonDone).length,
+    exercisesDone: DATA.exercises.filter((e) => exerciseDone(e.id)).length,
+    modulesCompleted: ALL_MODULES.filter(moduleCompleted).length,
+    studyMinutes: Object.values(progress.studyLog).reduce((sum, min) => sum + min, 0),
+    streak: computeStreak(),
+  };
+}
+
+/** Sequência: dias seguidos estudados. Se hoje ainda não estudou, a sequência de ontem continua valendo. */
+function computeStreak() {
+  const date = new Date();
+  if (!progress.studyLog[dayKey(date)]) date.setDate(date.getDate() - 1);
+  let streak = 0;
+  while (progress.studyLog[dayKey(date)]) {
+    streak += 1;
+    date.setDate(date.getDate() - 1);
+  }
+  return streak;
+}
+
+/** Próximo passo recomendado: primeiro módulo disponível que ainda não foi concluído. */
+function findNextStep() {
+  for (const module of ALL_MODULES) {
+    if (!hasContent(module) || moduleLocked(module) || moduleCompleted(module)) continue;
+    const lessonId = module.lessons.find((id) => !lessonDone(id));
+    if (lessonId) return { kind: 'lesson', module, lesson: DATA.lessons[lessonId] };
+    if (!exercisesOf(module).every((e) => exerciseDone(e.id))) return { kind: 'exercises', module };
+    return { kind: 'exam', module };
+  }
+  return null;
+}
+
+/* ----- Carreira: competências e percentuais ----- */
+const STATUS_INDEX = Object.fromEntries(DATA.skillStatus.map((s, i) => [s.id, i]));
+const skillStatus = (id) => progress.skills[id] ?? 'nao-iniciado';
+
+function levelFor(percent) {
+  if (percent < 15) return 'Iniciante';
+  if (percent < 40) return 'Básico';
+  if (percent < 65) return 'Intermediário';
+  if (percent < 85) return 'Avançado';
+  return 'Profissional';
+}
+
+/**
+ * Percentual = média dos pontos das competências (0, 25%, 60%, 100%).
+ * Enquanto nenhuma competência saiu de "Não iniciado", o resultado é "Não avaliado".
+ */
+function computeTrack(career) {
+  const total = career.skills.length;
+  const indexes = career.skills.map(([id]) => STATUS_INDEX[skillStatus(id)]);
+  const points = indexes.reduce((sum, i) => sum + DATA.skillStatus[i].points, 0);
+  const percent = Math.round((points / total) * 100);
+  const evaluated = indexes.some((i) => i > 0);
+  return {
+    id: career.id,
+    name: career.name,
+    evaluated,
+    percent,
+    level: evaluated ? levelFor(percent) : null,
+    skillsMastered: indexes.filter((i) => i === 3).length,
+    skillsTotal: total,
+    theory: Math.round((indexes.filter((i) => i >= 1).length / total) * 100),    // já estudou
+    practice: Math.round((indexes.filter((i) => i >= 2).length / total) * 100),  // já praticou
+  };
+}
+
+/** Eleva (nunca rebaixa) o status das competências ligadas a uma conquista. */
+function bumpSkills(ids, statusId) {
+  ids.forEach((id) => {
+    if (STATUS_INDEX[skillStatus(id)] < STATUS_INDEX[statusId]) progress.skills[id] = statusId;
   });
 }
 
-/** Monta uma barra de evolução a partir de um item de state.tracks. */
+
+/* ==========================================================================
+   4. TELAS
+   ========================================================================== */
+const view = (id) => $(`#view-${id}`);
+
+const emptyCard = (title, text) => `
+  <div class="card empty">
+    <p class="empty__title">${esc(title)}</p>
+    <p class="empty__text">${esc(text)}</p>
+  </div>`;
+
+/* ----- Dashboard ----- */
 function buildTrack(track) {
-  const wrapper = createElement('div', 'track');
-
-  // Linha superior: nome + selo ("Não avaliado" ou percentual)
-  const top = createElement('div', 'track__top');
-  top.append(createElement('h3', 'track__name', track.name));
-  top.append(
-    track.evaluated
-      ? createElement('span', 'pill pill--value', `${track.percent}%`)
-      : createElement('span', 'pill', 'Não avaliado')
-  );
-
-  // Barra: sem avaliação fica tracejada e com largura 0
-  const bar = createElement('div', track.evaluated ? 'track__bar' : 'track__bar track__bar--unevaluated');
-  bar.setAttribute('role', 'progressbar');
-  bar.setAttribute('aria-label', `Evolução em ${track.name}`);
+  const wrapper = document.createElement('div');
+  wrapper.className = 'track';
+  wrapper.innerHTML = `
+    <div class="track__top">
+      <h3 class="track__name">${esc(track.name)}</h3>
+      ${track.evaluated ? `<span class="pill pill--value">${track.percent}%</span>` : pill('Não avaliado')}
+    </div>
+    <div class="track__bar ${track.evaluated ? '' : 'track__bar--unevaluated'}" role="progressbar"
+      aria-label="Evolução em ${esc(track.name)}"
+      ${track.evaluated ? `aria-valuemin="0" aria-valuemax="100" aria-valuenow="${track.percent}"` : 'aria-valuetext="Não avaliado"'}>
+      <div class="track__fill"></div>
+    </div>
+    <div class="track__meta">
+      <span>Nível atual: ${track.level ?? 'não avaliado'}</span>
+      <span>Habilidades dominadas: ${track.skillsMastered} de ${track.skillsTotal}</span>
+    </div>`;
   if (track.evaluated) {
-    bar.setAttribute('aria-valuemin', '0');
-    bar.setAttribute('aria-valuemax', '100');
-    bar.setAttribute('aria-valuenow', String(track.percent));
-  } else {
-    bar.setAttribute('aria-valuetext', 'Não avaliado');
-  }
-  const fill = createElement('div', 'track__fill');
-  bar.append(fill);
-
-  // Informações abaixo da barra
-  const meta = createElement('div', 'track__meta');
-  meta.append(createElement('span', '', `Nível atual: ${track.level ?? 'não avaliado'}`));
-  meta.append(createElement('span', '', `Habilidades dominadas: ${track.skillsMastered} de ${track.skillsTotal}`));
-
-  wrapper.append(top, bar, meta);
-
-  // Define a largura depois de inserir no DOM, para a transição CSS animar
-  if (track.evaluated) {
-    requestAnimationFrame(() => { fill.style.width = `${track.percent}%`; });
+    // Largura definida depois de inserir no DOM, para a transição CSS animar
+    requestAnimationFrame(() => { $('.track__fill', wrapper).style.width = `${track.percent}%`; });
   }
   return wrapper;
 }
 
-/** Barras de Engenharia de Dados e Análise de Dados. */
-function renderTracks() {
-  const container = $('#progress-list');
-  container.replaceChildren(...state.tracks.map(buildTrack));
-}
-
-/** Seção "Próxima aula". */
-function renderNextLesson() {
-  $('#next-phase').textContent  = state.nextLesson.phase;
-  $('#next-lesson').textContent = state.nextLesson.title;
-  $('#next-goal').textContent   = state.nextLesson.goal;
-}
-
-/** Seção "Atividades recentes": mostra a lista ou o estado vazio. */
-function renderRecentActivities() {
-  const list  = $('#recent-list');
-  const empty = $('#recent-empty');
-  const hasItems = state.recentActivities.length > 0;
-
-  list.hidden  = !hasItems;
-  empty.hidden = hasItems;
-
-  list.replaceChildren(
-    ...state.recentActivities.map((activity) => {
-      const item = createElement('li', 'recent__item');
-      item.append(
-        createElement('span', 'recent__text', activity.text),
-        createElement('span', 'recent__time', activity.time)
-      );
-      return item;
-    })
-  );
-}
-
-/** Desenha o Dashboard inteiro. */
 function renderDashboard() {
-  renderGreeting();
-  renderStats();
-  renderTracks();
-  renderNextLesson();
-  renderRecentActivities();
+  $('[data-greeting]').textContent = getGreeting();
+
+  // Cards de estatísticas
+  const stats = computeStats();
+  $$('[data-stat]').forEach((el) => {
+    const value = stats[el.dataset.stat];
+    el.textContent = el.dataset.stat === 'studyMinutes' ? formatMinutes(value)
+      : el.dataset.stat === 'streak' ? `${value} ${value === 1 ? 'dia' : 'dias'}`
+      : String(value);
+  });
+
+  // Barras de evolução
+  $('#progress-list').replaceChildren(...DATA.careers.map((c) => buildTrack(computeTrack(c))));
+
+  // Próximo passo
+  const next = findNextStep();
+  const button = $('#next-button');
+  if (!next) {
+    $('#next-phase').textContent = 'Tudo em dia';
+    $('#next-lesson').textContent = 'Você concluiu todo o conteúdo disponível';
+    $('#next-goal').textContent = 'Novas aulas serão adicionadas aos poucos. Enquanto isso, avance nos projetos práticos.';
+    button.href = '#projetos';
+    button.lastChild.textContent = ' Ver projetos';
+  } else {
+    const phase = phaseOf(next.module);
+    $('#next-phase').textContent = `${phase.title}: ${next.module.title}`;
+    if (next.kind === 'lesson') {
+      $('#next-lesson').textContent = next.lesson.title;
+      $('#next-goal').textContent = next.lesson.objective;
+      button.href = `#sala-de-aula/${next.lesson.id}`;
+      button.lastChild.textContent = ' Iniciar aula';
+    } else if (next.kind === 'exercises') {
+      $('#next-lesson').textContent = 'Exercícios do módulo';
+      $('#next-goal').textContent = 'Resolva os exercícios obrigatórios para liberar a prova do módulo.';
+      button.href = '#exercicios';
+      button.lastChild.textContent = ' Fazer exercícios';
+    } else {
+      $('#next-lesson').textContent = 'Prova do módulo';
+      $('#next-goal').textContent = `Você concluiu as atividades. Tire pelo menos ${PASS_EXAM} pontos para fechar o módulo.`;
+      button.href = `#trilha/${next.module.id}`;
+      button.lastChild.textContent = ' Fazer a prova';
+    }
+  }
+
+  // Estudo de hoje
+  const days = Object.keys(progress.studyLog).length;
+  const today = progress.studyLog[dayKey()] ?? 0;
+  $('#study-summary').textContent = `Hoje: ${formatMinutes(today)}. Dias estudados no total: ${days}.`;
+
+  // Atividades recentes
+  const list = $('#recent-list');
+  const hasItems = progress.activity.length > 0;
+  list.hidden = !hasItems;
+  $('#recent-empty').hidden = hasItems;
+  list.innerHTML = progress.activity.slice(0, 6).map((a) => `
+    <li class="recent__item"><span class="recent__text">${esc(a.text)}</span><span class="recent__time">${relativeTime(a.at)}</span></li>`).join('');
+}
+
+/* ----- Trilha de Estudos ----- */
+function renderTrilha(moduleId) {
+  const module = moduleId ? findModule(moduleId) : null;
+  view('trilha').innerHTML = module ? moduleDetailHtml(module) : trilhaOverviewHtml();
+}
+
+function trilhaOverviewHtml() {
+  const firstOpen = DATA.phases.find((p) => p.modules.some((m) => !moduleCompleted(m)));
+  return DATA.phases.map((phase, i) => {
+    const done = phase.modules.filter(moduleCompleted).length;
+    const rows = phase.modules.map((module) => {
+      const status = moduleStatus(module);
+      const inner = `<span class="module__title">${esc(module.title)}</span>${statusPill(status)}`;
+      return status === 'bloqueado'
+        ? `<li class="module module--locked" aria-disabled="true">${inner}</li>`
+        : `<li><a class="module" href="#trilha/${module.id}">${inner}</a></li>`;
+    }).join('');
+    return `
+      <details class="phase card" ${phase === firstOpen ? 'open' : ''}>
+        <summary class="phase__summary">
+          <span class="phase__title">Fase ${i + 1}: ${esc(phase.title)}</span>
+          <span class="phase__count">${done} de ${phase.modules.length} módulos</span>
+        </summary>
+        <ul class="phase__modules">${rows}</ul>
+      </details>`;
+  }).join('');
+}
+
+function moduleDetailHtml(module) {
+  const status = moduleStatus(module);
+  const header = `
+    <a class="back" href="#trilha">Voltar para a trilha</a>
+    <div class="module-head"><h2 class="section-title">${esc(module.title)}</h2>${statusPill(status)}</div>
+    <p class="muted">${esc(phaseOf(module).title)}</p>`;
+
+  if (status === 'bloqueado') {
+    const previous = ALL_MODULES[ALL_MODULES.indexOf(module) - 1];
+    return header + emptyCard('Módulo bloqueado', `Conclua "${previous.title}" para liberar este módulo. Os fundamentos vêm primeiro.`);
+  }
+  if (!hasContent(module)) {
+    return header + emptyCard('Conteúdo em breve', 'As aulas, exercícios e a prova deste módulo ainda estão sendo preparados.');
+  }
+
+  const lessonsDone = module.lessons.filter(lessonDone).length;
+  const exercises = exercisesOf(module);
+  const exercisesDoneCount = exercises.filter((e) => exerciseDone(e.id)).length;
+  const ready = requirementsMet(module);
+  const attempts = attemptsOf(module);
+
+  const lessonLinks = module.lessons.map((id) => `
+    <li><a href="#sala-de-aula/${id}">${esc(DATA.lessons[id].title)}</a> ${lessonDone(id) ? pill('Concluída', 'ok') : pill('Pendente')}</li>`).join('');
+
+  const history = attempts.length ? `
+    <h3 class="subhead">Histórico de tentativas</h3>
+    <table class="table">
+      <thead><tr><th>Data</th><th>Acertos</th><th>Nota</th><th>Resultado</th></tr></thead>
+      <tbody>${attempts.slice().reverse().map((a) => `
+        <tr><td>${formatDate(a.at)}</td><td>${a.correct} de ${a.total}</td><td>${a.pct}</td><td>${a.pct >= PASS_EXAM ? pill('Aprovado', 'ok') : pill('Reprovado')}</td></tr>`).join('')}
+      </tbody>
+    </table>` : '';
+
+  const review = viewState.review?.moduleId === module.id ? examReviewHtml(module, viewState.review.attempt) : '';
+
+  const examForm = ready ? `
+    <form class="card" data-form="exam" data-module="${module.id}" novalidate>
+      <h3 class="subhead">Prova do módulo</h3>
+      <p class="muted">${DATA.exams[module.id].length} questões. Nota de 0 a 100, aprovação com ${PASS_EXAM} pontos. Você pode refazer quantas vezes quiser.</p>
+      ${questionsHtml('exam', DATA.exams[module.id])}
+      <p class="feedback feedback--bad" data-msg hidden></p>
+      <button class="button" type="submit">Entregar prova</button>
+    </form>` : `<div class="card"><p class="muted">A prova é liberada quando você concluir as aulas e os exercícios obrigatórios deste módulo.</p></div>`;
+
+  return `${header}
+    <section class="card" aria-label="Requisitos do módulo">
+      <h3 class="subhead">Para concluir o módulo</h3>
+      <ul class="checklist">
+        <li class="${lessonsDone === module.lessons.length ? 'is-done' : ''}">Aulas concluídas: ${lessonsDone} de ${module.lessons.length}
+          <ul class="checklist__sub">${lessonLinks}</ul></li>
+        <li class="${exercisesDoneCount === exercises.length ? 'is-done' : ''}">Exercícios obrigatórios: ${exercisesDoneCount} de ${exercises.length}
+          <a href="#exercicios">Ir para os exercícios</a></li>
+        <li class="${examPassed(module) ? 'is-done' : ''}">Prova com pelo menos ${PASS_EXAM} pontos. Melhor nota: ${attempts.length ? bestExam(module) : 'sem tentativas'}</li>
+      </ul>
+    </section>
+    ${review}${examForm}${history ? `<section class="card">${history}</section>` : ''}`;
+}
+
+function examReviewHtml(module, attempt) {
+  const questions = DATA.exams[module.id];
+  const passed = attempt.pct >= PASS_EXAM;
+  return `
+    <section class="card result" id="exam-result" tabindex="-1" aria-label="Resultado da prova">
+      <h3 class="subhead">Resultado: ${attempt.pct} pontos ${passed ? pill('Aprovado', 'ok') : pill('Reprovado')}</h3>
+      <p>Você acertou ${attempt.correct} de ${attempt.total} questões. ${passed ? 'Parabéns, a prova está aprovada.' : `Faltaram pontos para chegar a ${PASS_EXAM}. Veja as explicações e tente de novo abaixo.`}</p>
+      <ol class="review">
+        ${questions.map((q, i) => {
+          const ok = attempt.answers[i] === q.answer;
+          return `<li class="${ok ? 'is-ok' : 'is-bad'}">
+            <p><strong>${rich(q.q)}</strong></p>
+            ${q.code ? codeBlock(q.code) : ''}
+            <p>Sua resposta: ${rich(q.options[attempt.answers[i]])} ${ok ? pill('Certo', 'ok') : pill('Errado')}</p>
+            ${ok ? '' : `<p>Resposta correta: ${rich(q.options[q.answer])}</p>`}
+            <p class="muted">${rich(q.explain)}</p>
+          </li>`;
+        }).join('')}
+      </ol>
+    </section>`;
+}
+
+/* ----- Perguntas (usadas no quiz da aula e na prova) ----- */
+function questionsHtml(prefix, questions) {
+  return questions.map((q, i) => `
+    <fieldset class="question">
+      <legend>${i + 1}. ${rich(q.q)}</legend>
+      ${q.code ? codeBlock(q.code) : ''}
+      ${q.options.map((option, j) => `
+        <label class="option"><input type="radio" name="${prefix}-${i}" value="${j}"><span>${rich(option)}</span></label>`).join('')}
+      <p class="feedback" hidden></p>
+    </fieldset>`).join('');
+}
+
+function gradeQuestions(form, questions, prefix) {
+  const answers = questions.map((q, i) => {
+    const selected = $(`input[name="${prefix}-${i}"]:checked`, form);
+    return selected ? Number(selected.value) : -1;
+  });
+  const correct = answers.filter((a, i) => a === questions[i].answer).length;
+  return { answers, correct, total: questions.length };
+}
+
+/* ----- Sala de Aula ----- */
+function renderSala(lessonId) {
+  const lesson = DATA.lessons[lessonId];
+  if (lessonId && lesson) {
+    const module = ALL_MODULES.find((m) => m.lessons.includes(lessonId));
+    view('sala').innerHTML = moduleLocked(module)
+      ? emptyCard('Aula bloqueada', 'Conclua o módulo anterior para liberar esta aula.')
+      : lessonHtml(lesson, module);
+    return;
+  }
+  const items = Object.values(DATA.lessons).map((l) => {
+    const module = ALL_MODULES.find((m) => m.lessons.includes(l.id));
+    if (moduleLocked(module)) return '';
+    return `<li><a class="module" href="#sala-de-aula/${l.id}"><span class="module__title">${esc(l.title)}<span class="module__sub">${esc(phaseOf(module).title)}</span></span>${lessonDone(l.id) ? pill('Concluída', 'ok') : pill('Disponível', 'blue')}</a></li>`;
+  }).join('');
+  view('sala').innerHTML = `<p class="muted intro">Escolha uma aula. Cada sessão tem 40 minutos: 10 de teoria, 20 de prática, 5 de quiz e 5 de revisão.</p><ul class="phase__modules card">${items}</ul>`;
+}
+
+function lessonHtml(lesson, module) {
+  const section = (title, body) => `<section class="lesson__section"><h3 class="lesson__heading">${title}</h3>${body}</section>`;
+  const materials = (DATA.materials[lesson.id] ?? []).map(materialItemHtml).join('');
+  const done = lessonDone(lesson.id);
+  return `
+    <a class="back" href="#trilha/${module.id}">Voltar ao módulo</a>
+    <article class="lesson">
+      <h2 class="section-title">${esc(lesson.title)} ${done ? pill('Concluída', 'ok') : ''}</h2>
+      ${section('Objetivo de aprendizagem', `<p>${esc(lesson.objective)}</p>`)}
+      ${section('Explicação conceitual', lesson.concept.map((p) => `<p>${rich(p)}</p>`).join(''))}
+      ${section('Analogia do dia a dia', `<p class="callout">${rich(lesson.analogy)}</p>`)}
+      ${section('Comandos utilizados', `<dl class="commands">${lesson.commands.map((c) => `<dt>${esc(c.name)}</dt><dd>${rich(c.text)}</dd>`).join('')}</dl>`)}
+      ${section('Quando usar na Engenharia de Dados', `<p>${rich(lesson.whenToUse)}</p>`)}
+      ${section('Exemplo de código comentado', codeBlock(lesson.code))}
+      ${section('Aplicação profissional', `<p>${rich(lesson.professional)}</p>`)}
+      ${section('Desafio prático', `
+        <p>${rich(lesson.challenge)}</p>
+        <label class="field"><span>Sua resposta (salva automaticamente)</span>
+          <textarea rows="6" data-note="${lesson.id}">${esc(progress.notes[lesson.id] ?? '')}</textarea></label>`)}
+      ${section('Quiz da aula', `
+        <form data-form="quiz" data-lesson="${lesson.id}" novalidate>
+          ${questionsHtml('quiz', lesson.quiz)}
+          <p class="feedback feedback--bad" data-msg hidden></p>
+          <p class="result-text" data-result hidden></p>
+          <button class="button" type="submit">Conferir quiz</button>
+          <button class="button button--ghost" type="button" data-action="retry" hidden>Refazer quiz</button>
+        </form>`)}
+      ${section('Material complementar', materials ? `<ul class="materials">${materials}</ul>` : '<p class="muted">Em breve.</p>')}
+    </article>`;
+}
+
+/* ----- Exercícios ----- */
+const TYPE_LABELS = { choice: 'Múltipla escolha', bool: 'Verdadeiro ou falso', code: 'Completar código', error: 'Identificar erro', script: 'Escrever script' };
+
+function exerciseHtml(ex) {
+  const state = progress.exercises[ex.id];
+  const options = ex.type === 'bool' ? ['Verdadeiro', 'Falso'] : ex.options;
+  let field;
+  if (options) {
+    field = options.map((o, j) => `<label class="option"><input type="radio" name="${ex.id}" value="${j}"><span>${rich(o)}</span></label>`).join('');
+  } else if (ex.type === 'code') {
+    field = `<label class="field"><span>Sua resposta</span><input type="text" name="answer" autocomplete="off" spellcheck="false"></label>`;
+  } else {
+    field = `<label class="field"><span>Seu código</span><textarea name="answer" rows="5" spellcheck="false"></textarea></label>`;
+  }
+  return `
+    <form class="card exercise" data-form="exercise" data-ex="${ex.id}" novalidate>
+      <div class="exercise__meta">
+        ${pill(TYPE_LABELS[ex.type])}${pill(ex.level, 'blue')}
+        <span data-badge>${state?.done ? pill('Concluído', 'ok') : state ? pill('Tentativa feita') : pill('Pendente')}</span>
+      </div>
+      <p class="exercise__prompt">${rich(ex.prompt)}</p>
+      ${ex.code ? codeBlock(ex.code) : ''}
+      ${field}
+      <p class="feedback" role="status" hidden></p>
+      <button class="button" type="submit">Conferir</button>
+    </form>`;
+}
+
+function renderExercicios() {
+  const sections = Object.values(DATA.lessons).map((lesson) => {
+    const module = ALL_MODULES.find((m) => m.lessons.includes(lesson.id));
+    if (moduleLocked(module)) return '';
+    const list = DATA.exercises.filter((e) => e.lesson === lesson.id);
+    return `<section><h2 class="section-title">${esc(lesson.title)}</h2>${list.map(exerciseHtml).join('')}</section>`;
+  }).join('');
+  const done = DATA.exercises.filter((e) => exerciseDone(e.id)).length;
+  view('exercicios').innerHTML = `
+    <p class="muted intro">Responda e clique em Conferir. A explicação aparece depois da sua tentativa, e você pode tentar de novo. Concluídos: ${done} de ${DATA.exercises.length}.</p>
+    ${sections}`;
+}
+
+/* ----- Projetos ----- */
+const PROJECT_STATUS = [['nao-iniciado', 'Não iniciado'], ['andamento', 'Em andamento'], ['concluido', 'Concluído']];
+const isGithubUrl = (url) => /^https:\/\/github\.com\/[\w.-]+(\/[\w.-]+)?/i.test(url);
+
+function renderProjetos() {
+  view('projetos').innerHTML = DATA.projects.map((p) => {
+    const state = progress.projects[p.id] ?? { status: 'nao-iniciado', github: '' };
+    const list = (items) => `<ul class="bullets">${items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul>`;
+    return `
+      <article class="card project">
+        <div class="module-head"><h2 class="section-title">${esc(p.title)}</h2>${state.status === 'concluido' ? pill('Concluído', 'ok') : ''}</div>
+        <p><strong>Problema:</strong> ${esc(p.problem)}</p>
+        <p><strong>Objetivo:</strong> ${esc(p.goal)}</p>
+        <p class="tags">${p.techs.map((t) => pill(t, 'blue')).join('')}</p>
+        <div class="project__cols">
+          <div><h3 class="subhead">Etapas</h3>${list(p.steps)}</div>
+          <div><h3 class="subhead">Critérios de avaliação</h3>${list(p.criteria)}</div>
+        </div>
+        <p><strong>Desafio:</strong> ${esc(p.challenges)}</p>
+        <div class="project__form">
+          <label class="field"><span>Status</span>
+            <select data-project="${p.id}" data-field="status">
+              ${PROJECT_STATUS.map(([id, label]) => `<option value="${id}" ${state.status === id ? 'selected' : ''}>${label}</option>`).join('')}
+            </select></label>
+          <label class="field"><span>Link do GitHub</span>
+            <input type="url" placeholder="https://github.com/usuario/repositorio" value="${esc(state.github)}" data-project="${p.id}" data-field="github"></label>
+        </div>
+        <p class="feedback feedback--bad" data-msg hidden></p>
+      </article>`;
+  }).join('');
+}
+
+/* ----- Minha Carreira ----- */
+function renderCarreira() {
+  view('carreira').innerHTML = `
+    <p class="muted intro">Marque seu nível real em cada competência. Passar em provas e concluir projetos com link no GitHub eleva as competências ligadas automaticamente, e você pode ajustar quando quiser.</p>
+    ${DATA.careers.map((career) => {
+      const t = computeTrack(career);
+      return `
+        <section class="card career" aria-labelledby="career-${career.id}">
+          <div class="module-head">
+            <h2 class="section-title" id="career-${career.id}">${esc(career.name)}</h2>
+            ${t.evaluated ? `<span class="pill pill--value">${t.percent}%</span>` : pill('Não avaliado')}
+          </div>
+          <div class="meters">
+            <div><div class="meters__label"><span>Conhecimento teórico</span><span>${t.theory}%</span></div>
+              <div class="meter"><div class="meter__fill meter__fill--blue" style="width:${t.theory}%"></div></div></div>
+            <div><div class="meters__label"><span>Capacidade prática</span><span>${t.practice}%</span></div>
+              <div class="meter"><div class="meter__fill meter__fill--violet" style="width:${t.practice}%"></div></div></div>
+          </div>
+          <ul class="skills">
+            ${career.skills.map(([id, name]) => `
+              <li class="skill"><label for="sk-${id}">${esc(name)}</label>
+                <select id="sk-${id}" data-skill="${id}">
+                  ${DATA.skillStatus.map((s) => `<option value="${s.id}" ${skillStatus(id) === s.id ? 'selected' : ''}>${s.label}</option>`).join('')}
+                </select></li>`).join('')}
+          </ul>
+        </section>`;
+    }).join('')}`;
+}
+
+/* ----- Materiais complementares ----- */
+function materialItemHtml(m) {
+  return `<li><a href="${esc(m.url)}" target="_blank" rel="noopener noreferrer">${esc(m.title)}</a>
+    <span class="materials__meta">${pill(m.type)}${pill(m.lang)}</span></li>`;
+}
+
+function renderMateriais() {
+  view('materiais').innerHTML = `
+    <p class="muted intro">Links oficiais organizados por aula. Priorizamos materiais em português.</p>
+    ${Object.values(DATA.lessons).map((lesson) => `
+      <section class="card">
+        <h2 class="section-title">${esc(lesson.title)}</h2>
+        <ul class="materials">${(DATA.materials[lesson.id] ?? []).map(materialItemHtml).join('') || '<li class="muted">Em breve.</li>'}</ul>
+      </section>`).join('')}`;
 }
 
 
 /* ==========================================================================
-   4. NAVEGAÇÃO ENTRE PÁGINAS
-   Funciona com o "hash" da URL (ex.: index.html#projetos).
-   Vantagens: não recarrega a página, o botão "voltar" do navegador funciona
-   e cada página tem um endereço próprio.
+   5. AÇÕES DO USUÁRIO
+   Os eventos são "delegados": um único ouvinte no document trata todos os
+   formulários e campos, mesmo os criados depois pela renderização.
+   ========================================================================== */
+
+/** Marca cada pergunta como certa/errada e mostra a explicação. */
+function markQuestions(form, questions, answers) {
+  $$('fieldset.question', form).forEach((fieldset, i) => {
+    const ok = answers[i] === questions[i].answer;
+    setFeedback($('.feedback', fieldset), ok ? 'ok' : 'bad', `${ok ? 'Correto.' : 'Incorreto.'} ${questions[i].explain}`);
+  });
+  $$('input', form).forEach((input) => { input.disabled = true; });
+}
+
+function handleQuiz(form) {
+  const lesson = DATA.lessons[form.dataset.lesson];
+  const grade = gradeQuestions(form, lesson.quiz, 'quiz');
+  const message = $('[data-msg]', form);
+  if (grade.answers.includes(-1)) {
+    setFeedback(message, 'bad', 'Responda todas as perguntas antes de conferir.');
+    return;
+  }
+  message.hidden = true;
+
+  const pct = Math.round((grade.correct / grade.total) * 100);
+  const record = progress.lessons[lesson.id] ?? {};
+  record.attempts = (record.attempts ?? 0) + 1;
+  record.quizBest = Math.max(record.quizBest ?? 0, pct);
+
+  let text;
+  if (pct >= PASS_QUIZ) {
+    if (!record.completedAt) {
+      record.completedAt = Date.now();
+      logActivity(`Concluiu a aula "${lesson.title}"`);
+    }
+    text = `Você acertou ${grade.correct} de ${grade.total}. Aula concluída.`;
+  } else {
+    text = `Você acertou ${grade.correct} de ${grade.total}. São necessários ${PASS_QUIZ}% para concluir a aula. Releia o conteúdo e tente de novo.`;
+  }
+  progress.lessons[lesson.id] = record;
+  saveProgress();
+
+  markQuestions(form, lesson.quiz, grade.answers);
+  const result = $('[data-result]', form);
+  result.hidden = false;
+  result.textContent = text;
+  $('button[type="submit"]', form).hidden = true;
+  $('[data-action="retry"]', form).hidden = false;
+}
+
+function handleExercise(form) {
+  const ex = DATA.exercises.find((e) => e.id === form.dataset.ex);
+  const feedback = $('.feedback', form);
+  let correct = false;
+  let filled = true;
+
+  if (ex.type === 'choice' || ex.type === 'error' || ex.type === 'bool') {
+    const selected = $('input:checked', form);
+    if (!selected) filled = false; else correct = Number(selected.value) === ex.answer;
+  } else {
+    const value = form.elements.answer.value.trim();
+    if (!value) filled = false;
+    else if (ex.type === 'code') correct = ex.accept.some((a) => a.replace(/\s+/g, '') === value.replace(/\s+/g, ''));
+    else correct = ex.checks.every((pattern) => new RegExp(pattern).test(value));
+  }
+  if (!filled) { setFeedback(feedback, 'bad', 'Responda antes de conferir.'); return; }
+
+  const state = progress.exercises[ex.id] ?? { attempts: 0, done: false };
+  state.attempts += 1;
+  state.at = Date.now();
+  if (correct && !state.done) logActivity(`Acertou um exercício de "${DATA.lessons[ex.lesson].title}" (${TYPE_LABELS[ex.type].toLowerCase()})`);
+  if (correct) state.done = true;
+  progress.exercises[ex.id] = state;
+  saveProgress();
+
+  setFeedback(feedback, correct ? 'ok' : 'bad', `${correct ? 'Correto.' : 'Ainda não.'} ${ex.explain}`);
+  $('[data-badge]', form).innerHTML = state.done ? pill('Concluído', 'ok') : pill('Tentativa feita');
+}
+
+function handleExam(form) {
+  const module = findModule(form.dataset.module);
+  const questions = DATA.exams[module.id];
+  const grade = gradeQuestions(form, questions, 'exam');
+  if (grade.answers.includes(-1)) {
+    setFeedback($('[data-msg]', form), 'bad', 'Responda todas as questões antes de entregar.');
+    return;
+  }
+  const pct = Math.round((grade.correct / grade.total) * 100);
+  const attempt = { at: Date.now(), correct: grade.correct, total: grade.total, pct, answers: grade.answers };
+  const wasCompleted = moduleCompleted(module);
+
+  progress.exams[module.id] = [...attemptsOf(module), attempt];
+  logActivity(`Fez a prova de "${module.title}": ${pct} pontos`);
+  if (pct >= PASS_EXAM) bumpSkills(module.skills, 'aprendizado');
+  if (!wasCompleted && moduleCompleted(module)) logActivity(`Concluiu o módulo "${module.title}"`);
+  saveProgress();
+
+  viewState.review = { moduleId: module.id, attempt };
+  route({ moveFocus: false });
+  $('#exam-result')?.focus();
+}
+
+function handleStudy(form) {
+  const minutes = Math.round(Number(form.elements.minutes.value));
+  const message = $('#study-msg');
+  if (!minutes || minutes < 1 || minutes > 600) {
+    setFeedback(message, 'bad', 'Informe um valor entre 1 e 600 minutos.');
+    return;
+  }
+  const key = dayKey();
+  progress.studyLog[key] = (progress.studyLog[key] ?? 0) + minutes;
+  logActivity(`Registrou ${minutes} min de estudo`);
+  saveProgress();
+  renderDashboard();
+  setFeedback(message, 'ok', 'Estudo registrado.');
+}
+
+function handleProjectChange(target) {
+  const project = DATA.projects.find((p) => p.id === target.dataset.project);
+  const state = progress.projects[project.id] ?? { status: 'nao-iniciado', github: '' };
+  const card = target.closest('.project');
+  const message = $('[data-msg]', card);
+  message.hidden = true;
+
+  if (target.dataset.field === 'github') {
+    const value = target.value.trim();
+    if (value && !isGithubUrl(value)) {
+      setFeedback(message, 'bad', 'Use um link do GitHub, por exemplo https://github.com/usuario/repositorio.');
+      return;
+    }
+    state.github = value;
+  } else {
+    const wantsDone = target.value === 'concluido';
+    if (wantsDone && !isGithubUrl(state.github)) {
+      setFeedback(message, 'bad', 'Para concluir o projeto, informe antes o link do GitHub.');
+      target.value = state.status;
+      return;
+    }
+    if (wantsDone && state.status !== 'concluido') {
+      bumpSkills(project.skills, 'pratica');
+      logActivity(`Concluiu o projeto "${project.title}"`);
+    }
+    state.status = target.value;
+  }
+  progress.projects[project.id] = state;
+  saveProgress();
+}
+
+function handleSkillChange(target) {
+  progress.skills[target.dataset.skill] = target.value;
+  saveProgress();
+  renderCarreira();
+  document.getElementById(target.id)?.focus();   // mantém o foco no mesmo campo
+}
+
+function resetAll() {
+  if (!window.confirm('Apagar todo o progresso salvo neste navegador? Esta ação não pode ser desfeita.')) return;
+  progress = defaultProgress();
+  viewState.review = null;
+  saveProgress();
+  route({ moveFocus: false });
+}
+
+document.addEventListener('submit', (event) => {
+  const form = event.target.closest('form[data-form]');
+  if (!form) return;
+  event.preventDefault();
+  const handlers = { quiz: handleQuiz, exercise: handleExercise, exam: handleExam, study: handleStudy };
+  handlers[form.dataset.form](form);
+});
+
+document.addEventListener('change', (event) => {
+  const target = event.target;
+  if (target.dataset.skill) handleSkillChange(target);
+  else if (target.dataset.project) handleProjectChange(target);
+  else if (target.dataset.note) {
+    progress.notes[target.dataset.note] = target.value;
+    saveProgress();
+  }
+});
+
+document.addEventListener('click', (event) => {
+  const action = event.target.closest('[data-action]')?.dataset.action;
+  if (action === 'reset') resetAll();
+  if (action === 'retry') route({ moveFocus: false });   // redesenha a aula e libera o quiz
+});
+
+
+/* ==========================================================================
+   6. NAVEGAÇÃO E MENU
+   Rotas pelo "hash" da URL: #pagina ou #pagina/parametro
+   (ex.: #sala-de-aula/l-logica, #trilha/f1-m1).
    ========================================================================== */
 const PAGE_TITLES = {
-  'dashboard':    'Dashboard',
-  'trilha':       'Trilha de Estudos',
+  'dashboard': 'Dashboard',
+  'trilha': 'Trilha de Estudos',
   'sala-de-aula': 'Sala de Aula',
-  'exercicios':   'Exercícios',
-  'projetos':     'Projetos',
-  'carreira':     'Minha Carreira',
-  'materiais':    'Materiais Complementares',
+  'exercicios': 'Exercícios',
+  'projetos': 'Projetos',
+  'carreira': 'Minha Carreira',
+  'materiais': 'Materiais Complementares',
 };
 const DEFAULT_PAGE = 'dashboard';
 
-/** Lê a página pedida na URL; se for inválida, volta ao Dashboard. */
-function getCurrentPage() {
-  const requested = window.location.hash.replace('#', '');
-  return requested in PAGE_TITLES ? requested : DEFAULT_PAGE;
+function parseHash() {
+  const [page, param] = window.location.hash.replace('#', '').split('/');
+  return { page: page in PAGE_TITLES ? page : DEFAULT_PAGE, param };
 }
 
-/** Mostra a página atual e esconde as outras. */
-function showPage(pageId, { moveFocus = true } = {}) {
-  // 1. Exibir apenas a seção escolhida
-  $$('[data-page]').forEach((section) => {
-    section.hidden = section.dataset.page !== pageId;
-  });
+const RENDERERS = {
+  'dashboard': renderDashboard,
+  'trilha': renderTrilha,
+  'sala-de-aula': renderSala,
+  'exercicios': renderExercicios,
+  'projetos': renderProjetos,
+  'carreira': renderCarreira,
+  'materiais': renderMateriais,
+};
 
-  // 2. Marcar o item ativo no menu (aria-current informa leitores de tela)
+function showPage(page, { moveFocus = true } = {}) {
+  $$('[data-page]').forEach((section) => { section.hidden = section.dataset.page !== page; });
   $$('[data-nav]').forEach((link) => {
-    if (link.dataset.nav === pageId) link.setAttribute('aria-current', 'page');
+    if (link.dataset.nav === page) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
-
-  // 3. Atualizar o título da aba
-  document.title = `${PAGE_TITLES[pageId]} | Data Journey Academy`;
-
-  // 4. Voltar ao topo e levar o foco ao conteúdo (acessibilidade por teclado)
-  window.scrollTo(0, 0);
-  if (moveFocus) $('#conteudo').focus({ preventScroll: true });
+  document.title = `${PAGE_TITLES[page]} | Data Journey Academy`;
+  if (moveFocus) {
+    window.scrollTo(0, 0);
+    $('#conteudo').focus({ preventScroll: true });
+  }
 }
 
-/** Reage a cliques em links e ao botão "voltar" do navegador. */
-function initRouter() {
-  window.addEventListener('hashchange', () => {
-    showPage(getCurrentPage());
-    closeMenu();
-  });
-  // Primeira carga: não rouba o foco do início da página
-  showPage(getCurrentPage(), { moveFocus: false });
+/** Desenha a tela da rota atual e a exibe. */
+function route({ moveFocus = true } = {}) {
+  const { page, param } = parseHash();
+  if (page !== 'trilha') viewState.review = null;     // a revisão da prova só vale dentro do módulo
+  RENDERERS[page](param);
+  showPage(page, { moveFocus });
 }
 
-
-/* ==========================================================================
-   5. MENU LATERAL NO CELULAR
-   No celular a sidebar vira um painel deslizante. O CSS mostra o painel
-   quando o <body> tem a classe "nav-open".
-   ========================================================================== */
-const MOBILE_BREAKPOINT = 900; // mesmo valor do @media no CSS
+/* ----- Menu lateral no celular ----- */
+const MOBILE_BREAKPOINT = 900;   // mesmo valor do @media no CSS
 
 function openMenu() {
   document.body.classList.add('nav-open');
   $('[data-menu-toggle]').setAttribute('aria-expanded', 'true');
-  // Leva o foco para o primeiro link do menu
   $('.nav__link').focus();
 }
 
 function closeMenu() {
   if (!document.body.classList.contains('nav-open')) return;
   document.body.classList.remove('nav-open');
-  const toggle = $('[data-menu-toggle]');
-  toggle.setAttribute('aria-expanded', 'false');
+  $('[data-menu-toggle]').setAttribute('aria-expanded', 'false');
 }
 
 function initMenu() {
   $('[data-menu-toggle]').addEventListener('click', openMenu);
-  $$('[data-menu-close]').forEach((element) => element.addEventListener('click', closeMenu));
-
-  // Clicar em um item do menu fecha o painel (mesmo se já estiver na mesma página)
+  $$('[data-menu-close]').forEach((el) => el.addEventListener('click', closeMenu));
   $$('[data-nav]').forEach((link) => link.addEventListener('click', closeMenu));
-
-  // Esc fecha o menu
   document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape' && document.body.classList.contains('nav-open')) {
       closeMenu();
       $('[data-menu-toggle]').focus();
     }
   });
-
-  // Ao ampliar a janela, garante que o menu não fique "preso" aberto
-  window.addEventListener('resize', () => {
-    if (window.innerWidth > MOBILE_BREAKPOINT) closeMenu();
-  });
+  window.addEventListener('resize', () => { if (window.innerWidth > MOBILE_BREAKPOINT) closeMenu(); });
 }
 
 
 /* ==========================================================================
-   6. INICIALIZAÇÃO
+   7. INICIALIZAÇÃO
    ========================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
-  renderDashboard();
   initMenu();
-  initRouter();
+  window.addEventListener('hashchange', () => { route(); closeMenu(); });
+  route({ moveFocus: false });
 });

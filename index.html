@@ -89,6 +89,7 @@
       </nav>
 
       <p class="sidebar__note">Sessão diária de 40 minutos: teoria, prática, quiz e revisão.</p>
+      <button class="link-button" type="button" data-action="reset">Apagar meus dados</button>
     </aside>
 
     <!-- Fundo escurecido atrás do menu aberto no celular -->
@@ -149,7 +150,24 @@
             <span class="stat__value" data-stat="studyMinutes">0 min</span>
             <span class="stat__label">Tempo de estudo</span>
           </li>
+          <li class="stat">
+            <span class="stat__icon stat__icon--blue"><svg class="icon" aria-hidden="true"><use href="#icon-trail"/></svg></span>
+            <span class="stat__value" data-stat="streak">0 dias</span>
+            <span class="stat__label">Sequência de estudo</span>
+          </li>
         </ul>
+
+        <!-- Registro do estudo de hoje (sem penalidade para dias sem estudo) -->
+        <form class="card today" data-form="study" novalidate>
+          <div class="today__text">
+            <h2 class="card__title">Estudo de hoje</h2>
+            <p class="muted" id="study-summary"></p>
+          </div>
+          <label class="field"><span>Minutos estudados</span>
+            <input type="number" name="minutes" min="1" max="600" value="40" inputmode="numeric"></label>
+          <button class="button" type="submit">Registrar estudo</button>
+          <p class="feedback" id="study-msg" role="status" hidden></p>
+        </form>
 
         <!-- Evolução: duas barras independentes, renderizadas pelo script.js -->
         <section class="card progress" aria-labelledby="progress-title">
@@ -159,7 +177,7 @@
           <div class="progress__grid" id="progress-list">
             <!-- preenchido por renderTracks() -->
           </div>
-          <p class="progress__note">O percentual aparece depois das primeiras avaliações e é calculado a partir de competências, exercícios, provas e projetos concluídos.</p>
+          <p class="progress__note">O percentual vem das competências da página Minha Carreira, que sobem com provas aprovadas e projetos concluídos. Abrir uma aula não altera o progresso.</p>
         </section>
 
         <div class="split">
@@ -177,7 +195,7 @@
               <li><strong>5 min</strong> quiz</li>
               <li><strong>5 min</strong> revisão</li>
             </ul>
-            <a class="button" href="#sala-de-aula">
+            <a class="button" id="next-button" href="#sala-de-aula">
               <svg class="icon" aria-hidden="true"><use href="#icon-play"/></svg>
               Iniciar aula
             </a>
@@ -202,61 +220,38 @@
            Estrutura pronta para as próximas entregas. -->
       <section class="page" id="page-trilha" data-page="trilha" aria-labelledby="trilha-title" hidden>
         <h1 class="page__title" id="trilha-title">Trilha de Estudos</h1>
-        <div class="card empty empty--page">
-          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-trail"/></svg>
-          <p class="empty__title">Em construção</p>
-          <p class="empty__text">Aqui ficarão as 8 fases do aprendizado, com os módulos e o que falta para liberar cada um.</p>
-        </div>
+        <div id="view-trilha"></div>
       </section>
 
       <section class="page" id="page-sala-de-aula" data-page="sala-de-aula" aria-labelledby="aula-title" hidden>
         <h1 class="page__title" id="aula-title">Sala de Aula</h1>
-        <div class="card empty empty--page">
-          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-lesson"/></svg>
-          <p class="empty__title">Em construção</p>
-          <p class="empty__text">Cada aula terá explicação, analogia, código comentado, desafio prático, quiz e materiais de apoio.</p>
-        </div>
+        <div id="view-sala"></div>
       </section>
 
       <section class="page" id="page-exercicios" data-page="exercicios" aria-labelledby="exercicios-title" hidden>
         <h1 class="page__title" id="exercicios-title">Exercícios</h1>
-        <div class="card empty empty--page">
-          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-exercise"/></svg>
-          <p class="empty__title">Em construção</p>
-          <p class="empty__text">Quizzes, completar código, identificar erros e pequenos scripts, com feedback explicativo.</p>
-        </div>
+        <div id="view-exercicios"></div>
       </section>
 
       <section class="page" id="page-projetos" data-page="projetos" aria-labelledby="projetos-title" hidden>
         <h1 class="page__title" id="projetos-title">Projetos</h1>
-        <div class="card empty empty--page">
-          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-project"/></svg>
-          <p class="empty__title">Em construção</p>
-          <p class="empty__text">Projetos progressivos, de um CSV simples até pipelines completos, com campo para o link do GitHub.</p>
-        </div>
+        <div id="view-projetos"></div>
       </section>
 
       <section class="page" id="page-carreira" data-page="carreira" aria-labelledby="carreira-title" hidden>
         <h1 class="page__title" id="carreira-title">Minha Carreira</h1>
-        <div class="card empty empty--page">
-          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-career"/></svg>
-          <p class="empty__title">Em construção</p>
-          <p class="empty__text">Duas trilhas independentes, Analista de Dados e Engenheiro de Dados, com o status de cada competência.</p>
-        </div>
+        <div id="view-carreira"></div>
       </section>
 
       <section class="page" id="page-materiais" data-page="materiais" aria-labelledby="materiais-title" hidden>
         <h1 class="page__title" id="materiais-title">Materiais Complementares</h1>
-        <div class="card empty empty--page">
-          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-library"/></svg>
-          <p class="empty__title">Em construção</p>
-          <p class="empty__text">Vídeos, documentação oficial e artigos reais, organizados por aula.</p>
-        </div>
+        <div id="view-materiais"></div>
       </section>
 
     </main>
   </div>
 
+  <script src="data.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
