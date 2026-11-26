@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0E1020">
+  <meta name="description" content="Plataforma pessoal de estudos em Engenharia de Dados e Análise de Dados.">
+  <title>Dashboard | Data Journey Academy</title>
+
+  <!-- Tipografia: Sora (títulos) + IBM Plex Sans (texto). Há fontes de reserva no CSS. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Sora:wght@500;600;700&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== Ícones (sprite SVG) =====
+       Cada <symbol> é reutilizado com <use href="#icon-nome">. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs>
+      <linearGradient id="grad-brand" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#4C8DFF"/>
+        <stop offset="1" stop-color="#8B5CF6"/>
+      </linearGradient>
+    </defs>
+    <symbol id="icon-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="9" rx="2"/><rect x="13.5" y="3" width="7.5" height="5.5" rx="2"/><rect x="13.5" y="11.5" width="7.5" height="9.5" rx="2"/><rect x="3" y="15" width="7.5" height="6" rx="2"/></symbol>
+    <symbol id="icon-trail" viewBox="0 0 24 24"><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="5.5" r="2.5"/><path d="M8 18.5h6.5a3.5 3.5 0 0 0 0-7h-5a3.5 3.5 0 0 1 0-7H16"/></symbol>
+    <symbol id="icon-lesson" viewBox="0 0 24 24"><path d="M3 5.5A1.5 1.5 0 0 1 4.5 4H10a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H3z"/><path d="M21 5.5A1.5 1.5 0 0 0 19.5 4H14a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h7z"/></symbol>
+    <symbol id="icon-exercise" viewBox="0 0 24 24"><path d="m8 8-4 4 4 4"/><path d="m16 8 4 4-4 4"/><path d="m13.5 5-3 14"/></symbol>
+    <symbol id="icon-project" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v8.5A2.5 2.5 0 0 1 18.5 21h-13A2.5 2.5 0 0 1 3 18.5z"/></symbol>
+    <symbol id="icon-career" viewBox="0 0 24 24"><path d="M4 20V10"/><path d="M10 20V4"/><path d="M16 20v-7"/><path d="M22 20H2"/></symbol>
+    <symbol id="icon-library" viewBox="0 0 24 24"><path d="M4 4.5h4v15H4z"/><path d="M10 4.5h4v15h-4z"/><path d="m16.2 5.6 3.8-1 3 14.2-3.8 1z" transform="translate(-2 0)"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.7 2.7L16 9.5"/></symbol>
+    <symbol id="icon-pencil" viewBox="0 0 24 24"><path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17z"/><path d="m14.5 7.5 3 3"/></symbol>
+    <symbol id="icon-medal" viewBox="0 0 24 24"><circle cx="12" cy="9" r="5.5"/><path d="m8.7 13.6-1.7 7 5-2.6 5 2.6-1.7-7"/></symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/></symbol>
+    <symbol id="icon-menu" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="icon-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></symbol>
+    <symbol id="icon-inbox" viewBox="0 0 24 24"><path d="M3 13h5l1.5 3h5L16 13h5"/><path d="M5.5 5h13L21 13v5.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V13z"/></symbol>
+  </svg>
+
+  <a class="skip-link" href="#conteudo">Ir para o conteúdo</a>
+
+  <div class="app">
+
+    <!-- ===== Barra superior (aparece só no celular) ===== -->
+    <header class="topbar">
+      <button class="icon-button" type="button" data-menu-toggle aria-controls="sidebar" aria-expanded="false" aria-label="Abrir menu">
+        <svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg>
+      </button>
+      <span class="topbar__title">Data Journey Academy</span>
+    </header>
+
+    <!-- ===== Sidebar fixa ===== -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <!-- Marca: dois pontos ligados por uma trilha -->
+        <svg class="brand__mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="10" fill="url(#grad-brand)"/>
+          <path d="M9 22c0-6 14-4 14-10" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="1 4"/>
+          <circle cx="9" cy="22" r="3" fill="#fff"/>
+          <circle cx="23" cy="10" r="3" fill="none" stroke="#fff" stroke-width="2"/>
+        </svg>
+        <div class="brand__text">
+          <span class="brand__name">Data Journey</span>
+          <span class="brand__sub">Academy</span>
+        </div>
+        <button class="icon-button brand__close" type="button" data-menu-close aria-label="Fechar menu">
+          <svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg>
+        </button>
+      </div>
+
+      <!-- Navegação: cada link aponta para um "#hash".
+           O script.js lê o hash e mostra a página correspondente. -->
+      <nav class="nav" aria-label="Navegação principal">
+        <ul class="nav__list">
+          <li><a class="nav__link" href="#dashboard" data-nav="dashboard"><svg class="icon" aria-hidden="true"><use href="#icon-dashboard"/></svg>Dashboard</a></li>
+          <li><a class="nav__link" href="#trilha" data-nav="trilha"><svg class="icon" aria-hidden="true"><use href="#icon-trail"/></svg>Trilha de Estudos</a></li>
+          <li><a class="nav__link" href="#sala-de-aula" data-nav="sala-de-aula"><svg class="icon" aria-hidden="true"><use href="#icon-lesson"/></svg>Sala de Aula</a></li>
+          <li><a class="nav__link" href="#exercicios" data-nav="exercicios"><svg class="icon" aria-hidden="true"><use href="#icon-exercise"/></svg>Exercícios</a></li>
+          <li><a class="nav__link" href="#projetos" data-nav="projetos"><svg class="icon" aria-hidden="true"><use href="#icon-project"/></svg>Projetos</a></li>
+          <li><a class="nav__link" href="#carreira" data-nav="carreira"><svg class="icon" aria-hidden="true"><use href="#icon-career"/></svg>Minha Carreira</a></li>
+          <li><a class="nav__link" href="#materiais" data-nav="materiais"><svg class="icon" aria-hidden="true"><use href="#icon-library"/></svg>Materiais Complementares</a></li>
+        </ul>
+      </nav>
+
+      <p class="sidebar__note">Sessão diária de 40 minutos: teoria, prática, quiz e revisão.</p>
+    </aside>
+
+    <!-- Fundo escurecido atrás do menu aberto no celular -->
+    <div class="overlay" data-menu-close></div>
+
+    <!-- ===== Conteúdo principal ===== -->
+    <main class="main" id="conteudo" tabindex="-1">
+
+      <!-- ========== PÁGINA: DASHBOARD ========== -->
+      <section class="page" id="page-dashboard" data-page="dashboard" aria-labelledby="dashboard-title">
+
+        <!-- Boas-vindas + trilha das 8 fases -->
+        <div class="hero">
+          <h1 class="hero__title" id="dashboard-title"><span data-greeting>Olá</span>. Sua jornada em dados começa aqui.</h1>
+          <p class="hero__text">Aprenda Python, SQL e engenharia de dados em sessões curtas. Seu progresso só avança quando você pratica e é avaliado, não quando abre uma aula.</p>
+
+          <!-- Trilha decorativa: um ponto para cada uma das 8 fases.
+               O primeiro ponto é o início; os demais ainda não foram alcançados. -->
+          <figure class="trail">
+            <svg class="trail__svg" viewBox="0 0 640 110" role="img" aria-label="Trilha com 8 fases, da lógica de programação ao portfólio profissional. Nenhuma fase concluída ainda.">
+              <path class="trail__path" d="M40 80 C80 80 80 40 120 40 S160 76 200 76 S240 36 280 36 S320 72 360 72 S400 34 440 34 S480 70 520 70 S560 30 600 30"/>
+              <circle class="trail__dot trail__dot--start" cx="40" cy="80" r="9"/>
+              <circle class="trail__dot" cx="120" cy="40" r="6"/>
+              <circle class="trail__dot" cx="200" cy="76" r="6"/>
+              <circle class="trail__dot" cx="280" cy="36" r="6"/>
+              <circle class="trail__dot" cx="360" cy="72" r="6"/>
+              <circle class="trail__dot" cx="440" cy="34" r="6"/>
+              <circle class="trail__dot" cx="520" cy="70" r="6"/>
+              <circle class="trail__dot" cx="600" cy="30" r="6"/>
+            </svg>
+            <figcaption class="trail__caption">
+              <span>Fase 1: Fundamentos de Python</span>
+              <span>Fase 8: Portfólio profissional</span>
+            </figcaption>
+          </figure>
+        </div>
+
+        <!-- Indicadores gerais. Os valores vêm do objeto "state" em script.js -->
+        <h2 class="sr-only">Resumo dos estudos</h2>
+        <ul class="stats">
+          <li class="stat">
+            <span class="stat__icon stat__icon--blue"><svg class="icon" aria-hidden="true"><use href="#icon-check"/></svg></span>
+            <span class="stat__value" data-stat="lessonsCompleted">0</span>
+            <span class="stat__label">Aulas concluídas</span>
+          </li>
+          <li class="stat">
+            <span class="stat__icon stat__icon--violet"><svg class="icon" aria-hidden="true"><use href="#icon-pencil"/></svg></span>
+            <span class="stat__value" data-stat="exercisesDone">0</span>
+            <span class="stat__label">Exercícios realizados</span>
+          </li>
+          <li class="stat">
+            <span class="stat__icon stat__icon--blue"><svg class="icon" aria-hidden="true"><use href="#icon-medal"/></svg></span>
+            <span class="stat__value" data-stat="modulesCompleted">0</span>
+            <span class="stat__label">Módulos concluídos</span>
+          </li>
+          <li class="stat">
+            <span class="stat__icon stat__icon--violet"><svg class="icon" aria-hidden="true"><use href="#icon-clock"/></svg></span>
+            <span class="stat__value" data-stat="studyMinutes">0 min</span>
+            <span class="stat__label">Tempo de estudo</span>
+          </li>
+        </ul>
+
+        <!-- Evolução: duas barras independentes, renderizadas pelo script.js -->
+        <section class="card progress" aria-labelledby="progress-title">
+          <div class="card__head">
+            <h2 class="card__title" id="progress-title">Evolução por carreira</h2>
+          </div>
+          <div class="progress__grid" id="progress-list">
+            <!-- preenchido por renderTracks() -->
+          </div>
+          <p class="progress__note">O percentual aparece depois das primeiras avaliações e é calculado a partir de competências, exercícios, provas e projetos concluídos.</p>
+        </section>
+
+        <div class="split">
+          <!-- Próxima aula -->
+          <section class="card next" aria-labelledby="next-title">
+            <div class="card__head">
+              <h2 class="card__title" id="next-title">Próxima aula</h2>
+            </div>
+            <p class="next__phase" id="next-phase"></p>
+            <h3 class="next__lesson" id="next-lesson"></h3>
+            <p class="next__goal" id="next-goal"></p>
+            <ul class="session" aria-label="Divisão da sessão de 40 minutos">
+              <li><strong>10 min</strong> teoria</li>
+              <li><strong>20 min</strong> prática</li>
+              <li><strong>5 min</strong> quiz</li>
+              <li><strong>5 min</strong> revisão</li>
+            </ul>
+            <a class="button" href="#sala-de-aula">
+              <svg class="icon" aria-hidden="true"><use href="#icon-play"/></svg>
+              Iniciar aula
+            </a>
+          </section>
+
+          <!-- Atividades recentes -->
+          <section class="card recent" aria-labelledby="recent-title">
+            <div class="card__head">
+              <h2 class="card__title" id="recent-title">Atividades recentes</h2>
+            </div>
+            <ul class="recent__list" id="recent-list" hidden></ul>
+            <div class="empty" id="recent-empty">
+              <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-inbox"/></svg>
+              <p class="empty__title">Nenhuma atividade ainda</p>
+              <p class="empty__text">Aulas, exercícios e provas que você concluir aparecem aqui.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ========== PÁGINAS AINDA NÃO CONSTRUÍDAS ==========
+           Estrutura pronta para as próximas entregas. -->
+      <section class="page" id="page-trilha" data-page="trilha" aria-labelledby="trilha-title" hidden>
+        <h1 class="page__title" id="trilha-title">Trilha de Estudos</h1>
+        <div class="card empty empty--page">
+          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-trail"/></svg>
+          <p class="empty__title">Em construção</p>
+          <p class="empty__text">Aqui ficarão as 8 fases do aprendizado, com os módulos e o que falta para liberar cada um.</p>
+        </div>
+      </section>
+
+      <section class="page" id="page-sala-de-aula" data-page="sala-de-aula" aria-labelledby="aula-title" hidden>
+        <h1 class="page__title" id="aula-title">Sala de Aula</h1>
+        <div class="card empty empty--page">
+          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-lesson"/></svg>
+          <p class="empty__title">Em construção</p>
+          <p class="empty__text">Cada aula terá explicação, analogia, código comentado, desafio prático, quiz e materiais de apoio.</p>
+        </div>
+      </section>
+
+      <section class="page" id="page-exercicios" data-page="exercicios" aria-labelledby="exercicios-title" hidden>
+        <h1 class="page__title" id="exercicios-title">Exercícios</h1>
+        <div class="card empty empty--page">
+          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-exercise"/></svg>
+          <p class="empty__title">Em construção</p>
+          <p class="empty__text">Quizzes, completar código, identificar erros e pequenos scripts, com feedback explicativo.</p>
+        </div>
+      </section>
+
+      <section class="page" id="page-projetos" data-page="projetos" aria-labelledby="projetos-title" hidden>
+        <h1 class="page__title" id="projetos-title">Projetos</h1>
+        <div class="card empty empty--page">
+          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-project"/></svg>
+          <p class="empty__title">Em construção</p>
+          <p class="empty__text">Projetos progressivos, de um CSV simples até pipelines completos, com campo para o link do GitHub.</p>
+        </div>
+      </section>
+
+      <section class="page" id="page-carreira" data-page="carreira" aria-labelledby="carreira-title" hidden>
+        <h1 class="page__title" id="carreira-title">Minha Carreira</h1>
+        <div class="card empty empty--page">
+          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-career"/></svg>
+          <p class="empty__title">Em construção</p>
+          <p class="empty__text">Duas trilhas independentes, Analista de Dados e Engenheiro de Dados, com o status de cada competência.</p>
+        </div>
+      </section>
+
+      <section class="page" id="page-materiais" data-page="materiais" aria-labelledby="materiais-title" hidden>
+        <h1 class="page__title" id="materiais-title">Materiais Complementares</h1>
+        <div class="card empty empty--page">
+          <svg class="icon empty__icon" aria-hidden="true"><use href="#icon-library"/></svg>
+          <p class="empty__title">Em construção</p>
+          <p class="empty__text">Vídeos, documentação oficial e artigos reais, organizados por aula.</p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
