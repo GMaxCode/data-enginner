@@ -157,6 +157,8 @@ function moduleCompleted(module) {
 
 /** Um módulo só abre quando todos os anteriores estão concluídos ou validados. */
 function moduleLocked(module) {
+  const phase = phaseOf(module);
+  if (progress.unlockedPhases?.includes(phase.id)) return false;
   const index = ALL_MODULES.indexOf(module);
   return index > 0 && ALL_MODULES.slice(0, index).some((previous) => !moduleCompleted(previous));
 }
@@ -497,13 +499,41 @@ function examReviewHtml(module, attempt) {
 }
 
 /* ----- Perguntas (usadas no quiz da aula e na prova) ----- */
+function shuffle(items) {
+  const shuffled = [...items];
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+/** Equilibra a posição correta sem alterar os índices usados pelo gabarito. */
+function balancedOptionOrders(questions) {
+  const start = Math.floor(Math.random() * 4);
+  const correctPositions = shuffle(questions.map((_, index) => (start + index) % 4));
+  return questions.map((question, index) => {
+    if (question.options?.length !== 4 || !Number.isInteger(question.answer)
+      || question.answer < 0 || question.answer >= question.options.length) {
+      throw new Error('Cada questão de múltipla escolha precisa ter quatro alternativas e um gabarito válido.');
+    }
+
+    const distractors = shuffle(question.options.map((_, optionIndex) => optionIndex)
+      .filter((optionIndex) => optionIndex !== question.answer));
+    const order = [...distractors];
+    order.splice(correctPositions[index], 0, question.answer);
+    return order;
+  });
+}
+
 function questionsHtml(prefix, questions) {
+  const optionOrders = balancedOptionOrders(questions);
   return questions.map((q, i) => `
     <fieldset class="question">
       <legend>${i + 1}. ${rich(q.q)}</legend>
       ${q.code ? codeBlock(q.code) : ''}
-      ${q.options.map((option, j) => `
-        <label class="option"><input type="radio" name="${prefix}-${i}" value="${j}"><span>${rich(option)}</span></label>`).join('')}
+      ${optionOrders[i].map((optionIndex, position) => `
+        <label class="option"><input type="radio" name="${prefix}-${i}" value="${optionIndex}"><span>${String.fromCharCode(65 + position)}. ${rich(q.options[optionIndex])}</span></label>`).join('')}
       <p class="feedback" hidden></p>
     </fieldset>`).join('');
 }
@@ -527,15 +557,20 @@ function renderSala(lessonId) {
       : lessonHtml(lesson, module);
     return;
   }
-  const items = Object.values(DATA.lessons).map((l) => {
-    const module = moduleForLesson(l.id);
-    if (moduleLocked(module)) return '';
-    const status = lessonDone(l.id) ? pill('Concluída', 'ok')
-      : lessonValidated(l.id) ? pill('Validada', 'ok')
-      : pill('Disponível', 'blue');
-    return `<li><a class="module" href="#sala-de-aula/${l.id}"><span class="module__title">${esc(l.title)}<span class="module__sub">${esc(phaseOf(module).title)}</span></span>${status}</a></li>`;
+  const items = ALL_MODULES.flatMap((module) => {
+    if (moduleLocked(module)) return [];
+    if (!module.lessons.length) {
+      return [`<li><div class="module module--locked" aria-disabled="true"><span class="module__title">${esc(module.title)}<span class="module__sub">${esc(phaseOf(module).title)}</span></span>${pill('Conteúdo em breve')}</div></li>`];
+    }
+    return module.lessons.map((id) => {
+      const lesson = DATA.lessons[id];
+      const status = lessonDone(id) ? pill('Concluída', 'ok')
+        : lessonValidated(id) ? pill('Validada', 'ok')
+        : pill('Disponível', 'blue');
+      return `<li><a class="module" href="#sala-de-aula/${id}"><span class="module__title">${esc(lesson.title)}<span class="module__sub">${esc(phaseOf(module).title)}</span></span>${status}</a></li>`;
+    });
   }).join('');
-  view('sala').innerHTML = `<p class="muted intro">Escolha uma aula. Cada sessão tem 40 minutos: 10 de teoria, 20 de prática, 5 de quiz e 5 de revisão.</p><ul class="phase__modules card">${items}</ul>`;
+  view('sala').innerHTML = `<p class="muted intro">Escolha uma aula. Cada sessão tem 40 minutos: 10 de teoria, 20 de prática, 5 de quiz e 5 de revisão. Os assuntos sem aulas cadastradas aparecem como "Conteúdo em breve".</p><ul class="phase__modules card">${items}</ul>`;
 }
 
 function lessonHtml(lesson, module) {
@@ -578,14 +613,15 @@ function lessonHtml(lesson, module) {
 /* ----- Exercícios ----- */
 const TYPE_LABELS = { choice: 'Múltipla escolha', bool: 'Verdadeiro ou falso', code: 'Completar código', error: 'Identificar erro', script: 'Escrever script' };
 
-function exerciseHtml(ex) {
+function exerciseHtml(ex, optionOrder) {
   const state = progress.exercises[ex.id];
   const module = moduleForLesson(ex.lesson);
   const validated = moduleValidated(module);
   const options = ex.type === 'bool' ? ['Verdadeiro', 'Falso'] : ex.options;
   let field;
   if (options) {
-    field = options.map((o, j) => `<label class="option"><input type="radio" name="${ex.id}" value="${j}"><span>${rich(o)}</span></label>`).join('');
+    const order = optionOrder ?? shuffle(options.map((_, index) => index));
+    field = order.map((optionIndex, position) => `<label class="option"><input type="radio" name="${ex.id}" value="${optionIndex}"><span>${String.fromCharCode(65 + position)}. ${rich(options[optionIndex])}</span></label>`).join('');
   } else if (ex.type === 'code') {
     field = `<label class="field"><span>Sua resposta</span><input type="text" name="answer" autocomplete="off" spellcheck="false"></label>`;
   } else {
@@ -611,7 +647,10 @@ function renderExercicios() {
     const module = ALL_MODULES.find((m) => m.lessons.includes(lesson.id));
     if (moduleLocked(module)) return '';
     const list = DATA.exercises.filter((e) => e.lesson === lesson.id);
-    return `<section><h2 class="section-title">${esc(lesson.title)}</h2>${list.map(exerciseHtml).join('')}</section>`;
+    const choiceQuestions = list.filter((exercise) => exercise.type === 'choice' || exercise.type === 'error');
+    const optionOrders = balancedOptionOrders(choiceQuestions);
+    const choiceOrders = new Map(choiceQuestions.map((exercise, index) => [exercise.id, optionOrders[index]]));
+    return `<section><h2 class="section-title">${esc(lesson.title)}</h2>${list.map((exercise) => exerciseHtml(exercise, choiceOrders.get(exercise.id))).join('')}</section>`;
   }).join('');
   const done = DATA.exercises.filter((e) => exerciseDone(e.id)).length;
   view('exercicios').innerHTML = `

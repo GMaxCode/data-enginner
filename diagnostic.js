@@ -26,6 +26,7 @@
 const DIAG_PARTIAL = 50;     // % mínimo para considerar que há base
 const DIAG_MASTERY = 83;     // % mínimo (5 de 6) para candidato a domínio
 const DIAG_PRACTICE = 67;    // % mínimo na parte prática (2 de 3) para domínio
+const DIAG_PHASE_ADVANCE = 75; // aprovação no nivelamento de Python para abrir a fase 2
 
 
 /* ==========================================================================
@@ -129,12 +130,58 @@ function saveAttempt(area, answers) {
     logActivity(`Validou o módulo "${module.title}" no teste de nivelamento`);
   });
 
+  applyPlacementProgress(area, attempt);
   logActivity(`Fez o diagnóstico de ${area.name}: ${result.pct}%`);
   const evaluation = areaResult(area);
   if (evaluation.status !== 'nao-iniciado') bumpSkills(area.skills, evaluation.status);   // nunca rebaixa
   saveProgress();
   return attempt;
 }
+
+/** Aprovação no nivelamento de Python dispensa a fase 1 e abre Manipulação de dados. */
+function applyPlacementProgress(area, attempt) {
+  if (area.id !== 'python' || attempt.pct < DIAG_PHASE_ADVANCE) return false;
+
+  const moduleIds = new Set(area.topics.map((topic) => topic.module).filter(Boolean));
+  const modules = Array.from(moduleIds, (id) => {
+    const module = findModule(id);
+    if (!module) throw new Error(`O diagnóstico referencia um módulo inexistente: ${id}`);
+    return module;
+  });
+
+  let changed = false;
+  progress.validatedModules ??= {};
+  modules.forEach((module) => {
+    if (moduleCompleted(module)) return;
+    const topics = area.topics.filter((topic) => topic.module === module.id);
+    progress.validatedModules[module.id] = {
+      areaId: area.id,
+      topics: topics.map((topic) => topic.id),
+      at: attempt.at,
+      placement: true,
+    };
+    logActivity(`Validou o módulo "${module.title}" pela aprovação no nivelamento`);
+    changed = true;
+  });
+
+  const lastPhaseIndex = Math.max(...modules.map((module) =>
+    DATA.phases.findIndex((phase) => phase.modules.includes(module))));
+  const nextPhase = DATA.phases[lastPhaseIndex + 1];
+  if (nextPhase) {
+    progress.unlockedPhases ??= [];
+    if (!progress.unlockedPhases.includes(nextPhase.id)) {
+      progress.unlockedPhases.push(nextPhase.id);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// Aplica a regra também a quem já tinha um diagnóstico aprovado salvo.
+const pythonArea = areaById('python');
+const priorPassingAttempt = pythonArea && attemptsFor(pythonArea.id)
+  .find((attempt) => attempt.pct >= DIAG_PHASE_ADVANCE);
+if (priorPassingAttempt && applyPlacementProgress(pythonArea, priorPassingAttempt)) saveProgress();
 
 /** Evidência de uma competência da carreira (usada na página Minha Carreira). */
 function skillEvidenceHtml(skillId) {
@@ -205,15 +252,6 @@ let lastResult = null;    // { areaId, attempt } logo após finalizar
 const diagView = () => $('#view-diagnostico');
 const statusKind = (id) => (id === 'dominado' ? 'ok' : id === 'nao-iniciado' ? '' : 'blue');
 
-function shuffle(list) {
-  const copy = [...list];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
 const meterHtml = (label, value, color) => `
   <div><div class="meters__label"><span>${label}</span><span>${value}%</span></div>
     <div class="meter"><div class="meter__fill meter__fill--${color}" style="width:${value}%"></div></div></div>`;
@@ -273,7 +311,8 @@ function renderHub() {
 function startSession(areaId) {
   const area = areaById(areaId);
   const qs = areaQuestions(area);
-  session = { areaId, qs, index: 0, answers: {}, order: Object.fromEntries(qs.map((x) => [x.id, shuffle(x.options.map((_, i) => i))])) };
+  const optionOrders = balancedOptionOrders(qs);
+  session = { areaId, qs, index: 0, answers: {}, order: Object.fromEntries(qs.map((question, index) => [question.id, optionOrders[index]])) };
 }
 
 function renderSession(focus = false) {
@@ -293,8 +332,8 @@ function renderSession(focus = false) {
       <fieldset class="question">
         <legend id="diag-legend" tabindex="-1">${rich(question.q)}</legend>
         ${question.code ? codeBlock(question.code) : ''}
-        ${s.order[question.id].map((i) => `
-          <label class="option"><input type="radio" name="dq" value="${i}" ${s.answers[question.id] === i ? 'checked' : ''}><span>${rich(question.options[i])}</span></label>`).join('')}
+        ${s.order[question.id].map((optionIndex, position) => `
+          <label class="option"><input type="radio" name="dq" value="${optionIndex}" ${s.answers[question.id] === optionIndex ? 'checked' : ''}><span>${String.fromCharCode(65 + position)}. ${rich(question.options[optionIndex])}</span></label>`).join('')}
       </fieldset>
       <p class="feedback feedback--bad" id="diag-msg" hidden></p>
       <div class="step__nav">
@@ -315,7 +354,9 @@ function renderResult(areaId, attempt) {
       <div class="module-head"><h2 class="section-title" id="result-title" tabindex="-1">${esc(area.name)}: ${attempt.pct}%</h2>
         ${pill(skillLabel(result.status), statusKind(result.status))}</div>
       <p>Você acertou ${attempt.correct} de ${attempt.total} perguntas. ${esc(statusMessage(result))}</p>
-      <p class="muted">Os módulos são validados quando todos os tópicos ligados a eles forem demonstrados. A trilha respeita os pré-requisitos; use as recomendações para estudar apenas o que faltou.</p>
+      <p class="muted">${area.id === 'python' && attempt.pct >= DIAG_PHASE_ADVANCE
+        ? `Com ${DIAG_PHASE_ADVANCE}% ou mais, a fase 2 (Manipulação de dados) fica liberada. Você pode revisar os tópicos que errou sem bloquear seu avanço.`
+        : 'Os módulos são validados quando todos os tópicos ligados a eles forem demonstrados. Use as recomendações para estudar apenas o que faltou.'}</p>
       <div class="meters">${meterHtml('Conhecimento teórico', attempt.theoryPct, 'blue')}${meterHtml('Capacidade prática', attempt.practicePct, 'violet')}</div>
       <div class="area__topics">${attempt.topics.map((t) => {
         const topic = area.topics.find((x) => x.id === t.id);

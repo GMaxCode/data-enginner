@@ -4,7 +4,9 @@
    Para adicionar uma aula nova:
      1. Crie a aula em DATA.lessons
      2. Liste o id dela em "lessons" do módulo (veja o final do arquivo)
-     3. Crie exercícios em DATA.exercises (campo "lesson") e a prova em DATA.exams
+     3. Crie exercícios em DATA.exercises (campo "lesson") e a prova em DATA.exams.
+        Questões de múltipla escolha devem ter quatro opções; a interface embaralha
+        as alternativas e distribui o gabarito de forma equilibrada entre A e D.
      4. Adicione materiais em DATA.materials
    Nada precisa mudar no script.js.
    ========================================================================== */
@@ -70,9 +72,9 @@ for arquivo in ["vendas.csv", "clientes.csv"]:
     professional: 'Antes de carregar dados em um data warehouse, os pipelines conferem a taxa de linhas com erro. Se passar do limite, a carga é interrompida e a equipe é avisada, o que evita que dados ruins cheguem aos relatórios da empresa.',
     challenge: 'Escreva, em português e em passos numerados, o algoritmo de um programa que recebe 3 arquivos de vendas, confere se cada um tem mais de 0 linhas e avisa quais estão vazios. Use pelo menos uma decisão e uma repetição.',
     quiz: [
-      { q: 'Quais são os três blocos básicos de qualquer algoritmo?', options: ['Entrada, saída e erro', 'Sequência, decisão e repetição', 'Variável, função e classe'], answer: 1, explain: 'Sequência, decisão e repetição combinados resolvem a grande maioria dos problemas.' },
-      { q: 'Em "se a taxa de erro passar de 5%, reprovar a carga", qual bloco está sendo usado?', options: ['Decisão', 'Repetição', 'Sequência apenas'], answer: 0, explain: 'Há uma condição (passar de 5%) que define se uma ação acontece. Isso é uma decisão.' },
-      { q: 'Por que pensar na lógica antes de escrever código?', options: ['Porque o computador entende português', 'Porque o computador faz exatamente o que foi escrito, então os passos precisam estar certos', 'Porque assim o código fica mais curto automaticamente'], answer: 1, explain: 'O computador não adivinha intenções. Passos mal pensados viram erros no código.' },
+      { q: 'Quais são os três blocos básicos de qualquer algoritmo?', options: ['Entrada, saída e erro', 'Sequência, decisão e repetição', 'Variável, função e classe', 'Banco de dados, arquivo e gráfico'], answer: 1, explain: 'Sequência, decisão e repetição combinados resolvem a grande maioria dos problemas.' },
+      { q: 'Em "se a taxa de erro passar de 5%, reprovar a carga", qual bloco está sendo usado?', options: ['Decisão', 'Repetição', 'Sequência apenas', 'Declaração de uma variável'], answer: 0, explain: 'Há uma condição (passar de 5%) que define se uma ação acontece. Isso é uma decisão.' },
+      { q: 'Por que pensar na lógica antes de escrever código?', options: ['Porque o computador entende português', 'Porque o computador faz exatamente o que foi escrito, então os passos precisam estar certos', 'Porque assim o código fica mais curto automaticamente', 'Porque a lógica dispensa testar o programa'], answer: 1, explain: 'O computador não adivinha intenções. Passos mal pensados viram erros no código.' },
     ],
   },
 };
@@ -86,7 +88,7 @@ DATA.exercises = [
   {
     id: 'ex-logica-1', lesson: 'l-logica', type: 'choice', level: 'Fácil',
     prompt: 'Qual é a melhor definição de algoritmo?',
-    options: ['Um programa escrito em Python', 'Uma sequência finita de passos que resolve um problema', 'Um tipo de banco de dados'],
+    options: ['Um programa escrito em Python', 'Uma sequência finita de passos que resolve um problema', 'Um tipo de banco de dados', 'Uma lista de comandos sem objetivo definido'],
     answer: 1,
     explain: 'Algoritmo é a ideia, os passos. O Python é só uma das linguagens em que podemos escrevê-lo.',
   },
@@ -107,7 +109,7 @@ DATA.exercises = [
     id: 'ex-logica-4', lesson: 'l-logica', type: 'error', level: 'Médio',
     prompt: 'O código abaixo nunca termina. Por quê?',
     code: 'contador = 0\nwhile contador < 3:\n    print(contador)',
-    options: ['O print está escrito errado', 'O valor de contador nunca muda, então a condição fica sempre verdadeira', 'O while não existe em Python'],
+    options: ['O print está escrito errado', 'O valor de contador nunca muda, então a condição fica sempre verdadeira', 'O while não existe em Python', 'A variável contador começa com zero'],
     answer: 1,
     explain: 'Faltou atualizar o contador dentro do laço (por exemplo, contador = contador + 1). Sem isso a condição nunca fica falsa.',
   },
@@ -124,11 +126,11 @@ DATA.exercises = [
    -------------------------------------------------------------------------- */
 DATA.exams = {
   'f1-m1': [
-    { q: 'O que é um algoritmo?', options: ['Uma linguagem de programação', 'Uma sequência de passos que resolve um problema', 'Um arquivo de dados'], answer: 1, explain: 'Algoritmo é a lista de passos, independente da linguagem usada para escrevê-lo.' },
-    { q: 'Qual bloco permite executar o mesmo passo para cada arquivo de uma lista?', options: ['Decisão', 'Repetição', 'Comentário'], answer: 1, explain: 'A repetição (for) aplica o mesmo bloco a cada item da lista.' },
-    { q: 'O que o código abaixo mostra?', code: 'nota = 6\nif nota >= 7:\n    print("Aprovado")\nelse:\n    print("Recuperação")', options: ['Aprovado', 'Recuperação', 'Nada'], answer: 1, explain: '6 não é maior ou igual a 7, então a condição é falsa e o else é executado.' },
-    { q: 'Por que a ordem dos passos importa em uma sequência?', options: ['Porque o computador executa de cima para baixo, e um passo pode depender do anterior', 'Porque o computador escolhe a ordem sozinho', 'Não importa, o resultado é o mesmo'], answer: 0, explain: 'Calcular a média antes de ler as notas, por exemplo, gera resultado errado.' },
-    { q: 'Quantas vezes o print roda no código abaixo?', code: 'for numero in [10, 20, 30]:\n    print(numero)', options: ['1 vez', '3 vezes', 'Infinitas vezes'], answer: 1, explain: 'O laço roda uma vez para cada item da lista, e a lista tem 3 itens.' },
+    { q: 'O que é um algoritmo?', options: ['Uma linguagem de programação', 'Uma sequência de passos que resolve um problema', 'Um arquivo de dados', 'Um dispositivo que executa instruções'], answer: 1, explain: 'Algoritmo é a lista de passos, independente da linguagem usada para escrevê-lo.' },
+    { q: 'Qual bloco permite executar o mesmo passo para cada arquivo de uma lista?', options: ['Decisão', 'Repetição', 'Comentário', 'Atribuição'], answer: 1, explain: 'A repetição (for) aplica o mesmo bloco a cada item da lista.' },
+    { q: 'O que o código abaixo mostra?', code: 'nota = 6\nif nota >= 7:\n    print("Aprovado")\nelse:\n    print("Recuperação")', options: ['Aprovado', 'Recuperação', 'Nada', 'Ocorre um erro de sintaxe'], answer: 1, explain: '6 não é maior ou igual a 7, então a condição é falsa e o else é executado.' },
+    { q: 'Por que a ordem dos passos importa em uma sequência?', options: ['Porque o computador executa de cima para baixo, e um passo pode depender do anterior', 'Porque o computador escolhe a ordem sozinho', 'Não importa, o resultado é o mesmo', 'Porque o computador executa todas as instruções ao mesmo tempo'], answer: 0, explain: 'Calcular a média antes de ler as notas, por exemplo, gera resultado errado.' },
+    { q: 'Quantas vezes o print roda no código abaixo?', code: 'for numero in [10, 20, 30]:\n    print(numero)', options: ['1 vez', '3 vezes', 'Infinitas vezes', '2 vezes'], answer: 1, explain: 'O laço roda uma vez para cada item da lista, e a lista tem 3 itens.' },
   ],
 };
 
