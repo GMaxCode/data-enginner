@@ -316,7 +316,7 @@ function renderDashboard() {
     dot.classList.toggle('trail__dot--current', index === firstIncompletePhase);
   });
   const completedPhaseCount = completedPhases.filter(Boolean).length;
-  $('.trail__svg').setAttribute('aria-label', `Trilha com 8 fases, da lógica de programação ao portfólio profissional. ${completedPhaseCount} concluídas.`);
+  $('.trail__svg').setAttribute('aria-label', `Trilha com ${DATA.phases.length} fases, de ${DATA.phases[0].title} a ${DATA.phases.at(-1).title}. ${completedPhaseCount} concluídas.`);
 
   // Barras de evolução
   $('#progress-list').replaceChildren(...DATA.careers.map((c) => buildTrack(computeTrack(c))));
@@ -582,17 +582,25 @@ function lessonHtml(lesson, module) {
     <a class="back" href="#trilha/${module.id}">Voltar ao módulo</a>
     <article class="lesson">
       <h2 class="section-title">${esc(lesson.title)} ${done ? pill('Concluída', 'ok') : validated ? pill('Validada', 'ok') : ''}</h2>
+      ${lesson.level || lesson.estimatedMinutes ? `<p class="muted">${[phaseOf(module).title, module.title, lesson.level, lesson.estimatedMinutes ? `${lesson.estimatedMinutes} min` : ''].filter(Boolean).map(esc).join(' · ')}</p>` : ''}
       ${section('Objetivo de aprendizagem', `<p>${esc(lesson.objective)}</p>`)}
+      ${lesson.introduction ? section('Introdução', `<p>${rich(lesson.introduction)}</p>`) : ''}
       ${section('Explicação conceitual', lesson.concept.map((p) => `<p>${rich(p)}</p>`).join(''))}
       ${section('Analogia do dia a dia', `<p class="callout">${rich(lesson.analogy)}</p>`)}
       ${section('Comandos utilizados', `<dl class="commands">${lesson.commands.map((c) => `<dt>${esc(c.name)}</dt><dd>${rich(c.text)}</dd>`).join('')}</dl>`)}
       ${section('Quando usar na Engenharia de Dados', `<p>${rich(lesson.whenToUse)}</p>`)}
       ${section('Exemplo de código comentado', codeBlock(lesson.code))}
+      ${lesson.codeWalkthrough ? section('Explicação do código linha a linha', `<ol>${lesson.codeWalkthrough.map((line) => `<li>${rich(line)}</li>`).join('')}</ol>`) : ''}
       ${section('Aplicação profissional', `<p>${rich(lesson.professional)}</p>`)}
+      ${lesson.commonErrors ? section('Erros comuns e soluções', `<ul>${lesson.commonErrors.map((error) => `<li>${rich(error)}</li>`).join('')}</ul>`) : ''}
       ${section('Desafio prático', `
         <p>${rich(lesson.challenge)}</p>
         <label class="field"><span>Sua resposta (salva automaticamente)</span>
           <textarea rows="6" data-note="${lesson.id}">${esc(progress.notes[lesson.id] ?? '')}</textarea></label>`)}
+      ${lesson.completionCriteria ? section('Critérios de conclusão', `<ul>${lesson.completionCriteria.map((criterion) => `<li>${rich(criterion)}</li>`).join('')}</ul>`) : ''}
+      ${lesson.video !== undefined ? section('VIDEOAULA COMPLEMENTAR', lesson.video
+        ? `<p><a href="${esc(lesson.video.url)}" target="_blank" rel="noopener noreferrer">${esc(lesson.video.title)}</a> · ${esc(lesson.video.channel)}${lesson.video.duration ? ` · ${esc(lesson.video.duration)}` : ''}</p>`
+        : '<p class="muted">Videoaula ainda não cadastrada.</p>') : ''}
       ${section('Quiz da aula', `
         <form data-form="quiz" data-lesson="${lesson.id}" novalidate>
           ${questionsHtml('quiz', lesson.quiz)}
